@@ -13,7 +13,7 @@ export default function LoginForm() {
     const [state, action, isPending] = useActionState(loginAction, initialState);
 
     return (
-        <form action={action} className="flex flex-col gap-6 w-full max-w-md">
+        <form action={action} className="w-full text-uecg-black font-bold placeholder:text-gray-400 focus:outline-none focus:border-uecg-blue transition-all">
 
             {/* Mensaje de Error Global */}
             {state?.message && !state.success && (
@@ -40,7 +40,7 @@ export default function LoginForm() {
             </div>
 
             {/* Input Password */}
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 mt-3">
                 <label htmlFor="password" className="text-xs font-bold uppercase tracking-[0.2em] text-uecg-blue">
                     Contraseña
                 </label>
