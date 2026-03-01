@@ -1,17 +1,44 @@
 @import "tailwindcss";
 
 :root {
+  /* Base del sistema */
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #111827; /* Usamos el Ink Black (#111827) en lugar del negro puro */
+
+  /* --- PALETA SWISS STYLE U.E.C.G. (Variables CSS) --- */
+  --uecg-blue: #000089;  /* Swiss Blue */
+  --uecg-dark: #000060;  /* Deep Night */
+  --uecg-black: #111827; /* Ink Black */
+  --uecg-gray: #6B7280;  /* Slate Gray */
+  --uecg-line: #E5E7EB;  /* Line Gray */
 }
 
+/* Configuración del Tema en Tailwind v4 */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Mapeo de Colores UECG para usar clases como bg-uecg-blue, text-uecg-black */
+  --color-uecg-blue: var(--uecg-blue);
+  --color-uecg-dark: var(--uecg-dark);
+  --color-uecg-black: var(--uecg-black);
+  --color-uecg-gray: var(--uecg-gray);
+  --color-uecg-line: var(--uecg-line);
+
+  /* REGLA DE ORO: CERO CURVAS */
+  /* Sobrescribimos todos los radios por defecto a 0px */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
 }
 
+/* Modo Oscuro (Opcional: El manual sugiere fondo blanco, pero lo mantenemos por si acaso) */
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
@@ -19,8 +46,19 @@
   }
 }
 
+/* Estilos Base Globales */
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  /* Asegura suavizado de fuentes para el estilo suizo */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Forzar bordes rectos en elementos de formulario nativos */
+@layer base {
+  button, input, textarea, select {
+    border-radius: 0px !important;
+  }
 }
