@@ -5,6 +5,7 @@ import Modal from "@/shared/components/modal";
 import { deleteUserAction } from "../actions/user-mutations.action";
 import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import { toast } from "sonner"; // IMPORTAMOS SONNER PARA LOS TOASTS
 
 export default function DeleteUserModal() {
     const router = useRouter();
@@ -18,9 +19,17 @@ export default function DeleteUserModal() {
     const handleConfirm = async () => {
         if (!userId) return;
         setIsDeleting(true);
-        await deleteUserAction(userId);
+
+        // Capturamos el resultado de la Server Action
+        const result = await deleteUserAction(userId);
         setIsDeleting(false);
-        handleClose();
+
+        if (result.success) {
+            toast.success(result.message); // Notificación de éxito
+            handleClose(); // Cerramos el modal solo si fue exitoso
+        } else {
+            toast.error(result.message || "Error al eliminar usuario"); // Notificación de error
+        }
     };
 
     return (
@@ -36,7 +45,7 @@ export default function DeleteUserModal() {
                         ¿Estás seguro de eliminar este usuario?
                     </p>
                     <p className="text-uecg-gray text-sm mt-2">
-                        Esta acción es irreversible y eliminará todos los datos asociados al usuario ID: <span className="font-mono text-uecg-black">#{userId}</span>.
+                        Esta acción es irreversible y eliminará todos los datos asociados al usuario ID: <span className="font-mono text-uecg-black">#{userId?.slice(0, 8)}</span>.
                     </p>
                 </div>
 

@@ -1,39 +1,49 @@
-import { User } from "../validations/user.schema";
-
-// Datos Mock (Añadí imageUrl a algunos)
-// @ts-ignore
-const MOCK_USERS: User[] = [
-    { id: "1", name: "DANIEL ADMIN", email: "admin@uecg.edu.bo", role: "admin", status: "active", imageUrl: "https://i.pravatar.cc/150?u=1", createdAt: new Date() },
-    { id: "2", name: "MARIA DOCENTE", email: "maria@uecg.edu.bo", role: "teacher", status: "active", imageUrl: null, createdAt: new Date() }, // Sin foto
-    { id: "3", name: "JUAN PEREZ", email: "juan@uecg.edu.bo", role: "student", status: "inactive", imageUrl: null, createdAt: new Date() },
-    // ... más usuarios
-];
-
-interface FindAllParams {
-    query?: string;
-    role?: string;
-}
+import { prisma } from "@/lib/db";
+import { Prisma, Role } from "@/app/generated/prisma/client";
 
 export const userRepository = {
-    findAll: async ({ query, role }: FindAllParams = {}): Promise<User[]> => {
-        await new Promise((resolve) => setTimeout(resolve, 300)); // Menos delay para sentirlo "real-time"
 
-        let users = [...MOCK_USERS];
+    // 1. OBTENER Y FILTRAR
+    findAll: async (filters?: { query?: string; role?: string }) => {
+        const where: Prisma.UserWhereInput = {};
 
-        // 1. Filtrar por Búsqueda (Nombre o Email)
-        if (query) {
-            const lowerQuery = query.toLowerCase();
-            users = users.filter(user =>
-                user.name.toLowerCase().includes(lowerQuery) ||
-                user.email.toLowerCase().includes(lowerQuery)
-            );
+        // Filtro de texto (Nombre o Email)
+        if (filters?.query) {
+            where.OR = [
+                { name: { contains: filters.query, mode: "insensitive" } },
+                { email: { contains: filters.query, mode: "insensitive" } },
+            ];
         }
 
-        // 2. Filtrar por Rol
-        if (role && role !== 'all') {
-            users = users.filter(user => user.role === role);
+        // Filtro de Rol (Convirtiendo a MAYÚSCULAS para que coincida con Prisma)
+        if (filters?.role && filters.role !== "all") {
+            where.role = filters.role.toUpperCase() as Role;
         }
 
-        return users;
+        return await prisma.user.findMany({
+            where,
+            orderBy: { createdAt: "desc" },
+            select: { id: true, name: true, email: true, role: true, status: true, createdAt: true }
+        });
+    },
+
+    // 2. CREAR
+    create: async (data: Prisma.UserCreateInput) => {
+        return await prisma.user.create({ data });
+    },
+
+    // 3. ACTUALIZAR (¡Nuevo!)
+    update: async (id: string, data: Prisma.UserUpdateInput) => {
+        return await prisma.user.update({
+            where: { id },
+            data
+        });
+    },
+
+    // 4. ELIMINAR (¡Nuevo!)
+    delete: async (id: string) => {
+        return await prisma.user.delete({
+            where: { id }
+        });
     }
 };

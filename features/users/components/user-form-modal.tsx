@@ -4,16 +4,21 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Modal from "@/shared/components/modal";
 import { createUserAction, updateUserAction } from "../actions/user-mutations.action";
 import { useActionState, useEffect } from "react";
+import { User } from "../validations/user.schema"; // Necesitamos importar el type
 
 const initialState = { success: false, message: "" };
 
-export default function UserFormModal() {
+// AHORA EL COMPONENTE RECIBE LA LISTA DE USUARIOS
+export default function UserFormModal({ users }: { users: User[] }) {
     const router = useRouter();
     const searchParams = useSearchParams();
 
     const mode = searchParams.get("action");
     const userId = searchParams.get("id");
     const isOpen = mode === "create" || mode === "edit";
+
+    // BUSCAMOS AL USUARIO SI ESTAMOS EN MODO EDICIÓN
+    const currentUser = userId ? users.find((u) => u.id === userId) : null;
 
     const actionFn = mode === "create" ? createUserAction : updateUserAction;
     const [state, action, isPending] = useActionState(actionFn, initialState);
@@ -35,7 +40,8 @@ export default function UserFormModal() {
             isOpen={isOpen}
             onClose={handleClose}
         >
-            <form action={action} className="space-y-6">
+            {/* El atributo key es VITAL: obliga a React a recargar los defaultValue cuando cambia el usuario */}
+            <form action={action} className="space-y-6" key={currentUser?.id || "new"}>
                 {userId && <input type="hidden" name="id" value={userId} />}
 
                 {/* Input Nombre */}
@@ -47,6 +53,7 @@ export default function UserFormModal() {
                         className={inputClass}
                         required
                         autoComplete="off"
+                        defaultValue={currentUser?.name || ""} // PRE-CARGA
                     />
                 </div>
 
@@ -60,24 +67,38 @@ export default function UserFormModal() {
                         className={inputClass}
                         required
                         autoComplete="off"
+                        defaultValue={currentUser?.email || ""} // PRE-CARGA
                     />
                 </div>
 
-                {/* Select Rol (Custom Arrow) */}
+                {/* Input Contraseña */}
+                <div>
+                    <label className={labelClass}>
+                        {mode === "create" ? "Contraseña Temporal" : "Nueva Contraseña (Opcional)"}
+                    </label>
+                    <input
+                        name="password"
+                        type="text"
+                        placeholder={mode === "create" ? "Mínimo 6 caracteres" : "Dejar en blanco para mantener actual"}
+                        className={inputClass}
+                        required={mode === "create"}
+                    />
+                </div>
+
+                {/* Select Rol */}
                 <div>
                     <label className={labelClass}>Rol Asignado</label>
                     <div className={selectWrapperClass}>
                         <select
                             name="role"
                             className="w-full p-3 font-bold text-uecg-black bg-transparent outline-none appearance-none cursor-pointer z-10 relative text-sm"
+                            defaultValue={currentUser?.role || "STUDENT"} // PRE-CARGA
                         >
-                            <option value="student">ESTUDIANTE</option>
-                            <option value="teacher">DOCENTE</option>
-                            <option value="admin">ADMINISTRADOR</option>
+                            <option value="STUDENT">ESTUDIANTE</option>
+                            <option value="TEACHER">DOCENTE</option>
+                            <option value="ADMIN">ADMINISTRADOR</option>
                         </select>
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-uecg-black font-black text-xs">
-                            ▼
-                        </div>
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-uecg-black font-black text-xs">▼</div>
                     </div>
                 </div>
 

@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { getUsersAction } from "@/features/users/actions/get-users.action";
 import UserTable from "@/features/users/components/user-table";
-import UserToolbar from "@/features/users/components/user-toolbar"; // Toolbar
-import Pagination from "@/shared/components/pagination"; // Nueva Paginación
+import UserToolbar from "@/features/users/components/user-toolbar";
+import Pagination from "@/shared/components/pagination";
 import UserFormModal from "@/features/users/components/user-form-modal";
 import DeleteUserModal from "@/features/users/components/delete-user-modal";
 import { Plus } from "lucide-react";
@@ -20,11 +20,12 @@ export default async function UsersPage({ searchParams }: PageProps) {
     // 2. Obtener datos filtrados
     const { data: users, success } = await getUsersAction({ query, role });
 
-    if (!success || !users) return <div>Error...</div>;
+    if (!success || !users) return <div>Error cargando datos...</div>;
 
     return (
         <div className="space-y-6 relative">
-            <UserFormModal />
+            {/* AHORA PASAMOS LOS USUARIOS AL MODAL */}
+            <UserFormModal users={users} />
             <DeleteUserModal />
 
             <div className="flex justify-between items-end border-b border-uecg-line pb-6">
