@@ -14,6 +14,11 @@ const MENU_ITEMS = [
     { name: "Usuarios", href: "/admin/users", icon: Users },
     { name: "Roles", href: "/admin/roles", icon: Shield },
     { name: "Académico", href: "/admin/academic", icon: BookOpen },
+    { name: "Estudiantes", href: "/admin/students", icon: Users },
+    { name: "Asistencia", href: "/admin/attendance", icon: Users },
+    { name: "Calificaciones", href: "/admin/grades", icon: Users },
+    { name: "Boletin", href: "/admin/bulletins", icon: Users },
+
 ];
 
 export default function Sidebar() {

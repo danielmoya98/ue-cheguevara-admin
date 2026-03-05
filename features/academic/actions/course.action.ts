@@ -41,3 +41,12 @@ export async function removeCourseAction(id: string, classroomId: string) {
         return { success: false, message: error.message || "Error al remover" };
     }
 }
+
+export async function getTeacherCoursesAction(teacherId?: string) {
+    try {
+        const courses = await courseService.getTeacherCourses(teacherId);
+        return { success: true, data: courses };
+    } catch (error) {
+        return { success: false, error: "Error al cargar las materias del docente" };
+    }
+}

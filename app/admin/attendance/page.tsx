@@ -1,0 +1,123 @@
+import { getGradesAction } from "@/features/academic/actions/grade.action";
+import { attendanceService } from "@/features/attendance/services/attendance.service";
+import AttendanceSheet from "@/features/attendance/components/attendance-sheet";
+import { CalendarDays, Users } from "lucide-react";
+
+interface PageProps {
+    searchParams: Promise<{ [key: string]: string | undefined }>
+}
+
+export default async function AttendancePage({ searchParams }: PageProps) {
+    const params = await searchParams;
+
+    // 1. Obtener parámetros de búsqueda
+    // Si no hay fecha en la URL, usamos la fecha de hoy por defecto (en formato YYYY-MM-DD local)
+    const today = new Date().toLocaleDateString('en-CA'); // 'en-CA' da formato YYYY-MM-DD
+    const dateParam = params.date || today;
+    const classroomIdParam = params.classroomId;
+
+    // 2. Obtener la lista de aulas para el menú desplegable
+    const { data: grades, success } = await getGradesAction();
+    const gradesWithClassrooms = (grades || []).filter(g => g.classrooms.length > 0);
+
+    // 3. Si hay un aula seleccionada, buscar la planilla
+    let roster: any[] = [];
+    if (classroomIdParam) {
+        roster = await attendanceService.getAttendanceRoster(classroomIdParam, dateParam);
+    }
+
+    return (
+        <div className="space-y-8 relative">
+
+            {/* Header */}
+            <div className="border-b-4 border-uecg-black pb-6">
+                <h1 className="text-3xl font-black text-uecg-black uppercase tracking-tighter leading-none mb-2">
+                    Control de Asistencia
+                </h1>
+                <p className="text-uecg-gray font-bold text-xs uppercase tracking-widest mt-2">
+                    Registro diario por aulas y gestión escolar.
+                </p>
+            </div>
+
+            {/* Barra de Filtros (Navegación por URL) */}
+            <div className="bg-white p-6 border-2 border-uecg-line shadow-sm">
+                <form className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end" action="/admin/attendance">
+
+                    {/* Filtro: Fecha */}
+                    <div>
+                        <label className="text-[10px] font-black uppercase tracking-[0.15em] text-uecg-gray mb-2 block flex items-center gap-2">
+                            <CalendarDays size={14} /> Fecha de Registro
+                        </label>
+                        <input
+                            type="date"
+                            name="date"
+                            defaultValue={dateParam}
+                            required
+                            className="w-full border-2 border-gray-300 bg-white p-3 font-bold text-uecg-black uppercase focus:border-uecg-blue outline-none transition-colors text-sm"
+                        />
+                    </div>
+
+                    {/* Filtro: Aula */}
+                    <div className="md:col-span-2 flex gap-4 items-end">
+                        <div className="flex-1">
+                            <label className="text-[10px] font-black uppercase tracking-[0.15em] text-uecg-gray mb-2 block flex items-center gap-2">
+                                <Users size={14} /> Aula / Paralelo
+                            </label>
+                            <div className="relative border-2 border-gray-300 bg-white focus-within:border-uecg-blue transition-colors">
+                                <select
+                                    name="classroomId"
+                                    defaultValue={classroomIdParam || ""}
+                                    required
+                                    className="w-full p-3 font-bold text-uecg-black bg-transparent outline-none appearance-none cursor-pointer z-10 relative text-sm uppercase"
+                                >
+                                    <option value="" disabled>Seleccione un aula para tomar lista...</option>
+                                    {gradesWithClassrooms.map((grade) => (
+                                        <optgroup key={grade.id} label={`${grade.name} de ${grade.level}`}>
+                                            {grade.classrooms.map((classroom: any) => (
+                                                <option key={classroom.id} value={classroom.id}>
+                                                    Paralelo {classroom.name} (Turno {classroom.shift})
+                                                </option>
+                                            ))}
+                                        </optgroup>
+                                    ))}
+                                </select>
+                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-uecg-black font-black text-xs">▼</div>
+                            </div>
+                        </div>
+
+                        {/* Botón Buscar */}
+                        <button type="submit" className="px-8 py-3.5 bg-uecg-black text-white font-black uppercase tracking-widest text-sm hover:bg-uecg-blue transition-colors border-2 border-uecg-black">
+                            Cargar Planilla
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            {/* Renderizado Condicional de la Planilla */}
+            {!classroomIdParam ? (
+                <div className="p-16 text-center border-4 border-dashed border-gray-200 bg-gray-50">
+                    <span className="font-black uppercase tracking-widest text-lg text-uecg-gray block mb-2">Seleccione un Aula</span>
+                    <span className="text-sm font-bold text-gray-500 uppercase">Utilice los filtros superiores para cargar la lista de estudiantes.</span>
+                </div>
+            ) : (
+                <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-lg font-black uppercase tracking-widest text-uecg-blue">
+                            Planilla Oficial
+                        </h2>
+                        <span className="bg-uecg-black text-white px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+                            {new Date(dateParam).toLocaleDateString('es-BO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                        </span>
+                    </div>
+
+                    {/* Componente Interactivo que creamos */}
+                    <AttendanceSheet
+                        classroomId={classroomIdParam}
+                        date={dateParam}
+                        initialRoster={roster}
+                    />
+                </div>
+            )}
+        </div>
+    );
+}

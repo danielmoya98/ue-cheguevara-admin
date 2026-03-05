@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { gradeService } from "../services/grade.service";
 import { gradeSchema, classroomSchema } from "../validations/academic.schema";
+import { cookies } from "next/headers";
+import { evaluationSchema } from "@/features/grades/validations/grade.schema";
 
 export async function getGradesAction() {
     try {
@@ -54,5 +56,24 @@ export async function deleteClassroomAction(id: string) {
         return { success: true, message: "Paralelo eliminado" };
     } catch (error: any) {
         return { success: false, message: error.message || "Error al eliminar" };
+    }
+}
+
+export async function createEvaluationAction(prevState: any, formData: FormData) {
+    const userId = (await cookies()).get("uecg_session")?.value;
+    if (!userId) return { success: false, message: "Sesión expirada." };
+
+    const rawData = Object.fromEntries(formData.entries());
+    const validated = evaluationSchema.safeParse(rawData);
+
+    if (!validated.success) return { success: false, message: "Datos inválidos", errors: validated.error.flatten().fieldErrors };
+
+    try {
+        const newEval = await gradeService.createEvaluation(validated.data, userId);
+        revalidatePath(`/admin/grades/course/${validated.data.courseId}`);
+        // TRUCO DE UX: Devolvemos el ID de la nueva evaluación
+        return { success: true, message: "Evaluación creada.", evaluationId: newEval.id };
+    } catch (error: any) {
+        return { success: false, message: error.message || "Error al crear." };
     }
 }

@@ -1,0 +1,363 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+  STUDENT
+  SECRETARY // Preparado para el futuro
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+// --- TABLAS ---
+model User {
+  id                  String             @id @default(uuid()) // UUID para máxima seguridad
+  email               String             @unique
+  passwordHash        String // NUNCA guardamos el password en texto plano
+  name                String
+  role                Role               @default(STUDENT)
+  status              UserStatus         @default(ACTIVE)
+  forcePasswordChange Boolean            @default(true)
+  // Campos de auditoría (Buenas prácticas)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  courses             Course[]
+  teacherCourses      Course[]           @relation("TeacherCourses")
+  studentProfiles     StudentProfile[]
+  attendancesRecorded Attendance[]       @relation("RecordedAttendances")
+  evaluations         Evaluation[]       @relation("CreatedEvaluations")
+  announcements       Announcement[]
+  notificationReads   NotificationRead[]
+
+  @@map("users") // El nombre de la tabla real en Postgres será 'users' (en minúscula)
+}
+
+// NUEVA TABLA: Mapea el Enum Role con los permisos granulares
+model RolePermission {
+  id           String @id @default(uuid())
+  role         Role // Referencia al Enum (ADMIN, TEACHER, STUDENT)
+  permissionId String // El ID del permiso (ej: "users:read", "academic:write")
+
+  createdAt DateTime @default(now())
+
+  // Un rol no puede tener el mismo permiso duplicado
+  @@unique([role, permissionId])
+  @@map("role_permissions")
+}
+
+// --- ENUMS ACADÉMICOS ---
+enum AcademicLevel {
+  PRIMARIA
+  SECUNDARIA
+}
+
+// --- TABLAS ACADÉMICAS ---
+
+// 1. Catálogo de Materias (Inventario Global)
+model Subject {
+  id          String  @id @default(uuid())
+  name        String // Ej: "Matemáticas"
+  code        String  @unique // Ej: "MAT-01"
+  color       String  @default("#000089") // Color para identificarla en el horario visual
+  weeklyHours Int     @default(4) // Carga horaria recomendada a la semana
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  courses   Course[]
+
+  @@map("subjects")
+}
+
+model Grade {
+  id           String        @id @default(uuid())
+  name         String // Ej: "Primero", "Sexto"
+  numericOrder Int // 1, 2, 3... 6 (Para ordenar visualmente)
+  level        AcademicLevel // PRIMARIA o SECUNDARIA
+
+  // Relaciones
+  classrooms Classroom[] // Un grado tiene muchos paralelos (A, B, C)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([numericOrder, level]) // No puede haber dos "1ro de Primaria"
+  @@map("grades")
+}
+
+// NUEVO: 2. Paralelos/Aulas (Ej: "1ro de Primaria A")
+model Classroom {
+  id       String @id @default(uuid())
+  name     String // Ej: "A", "B", "C"
+  shift    String @default("MAÑANA") // Ej: "MAÑANA", "TARDE"
+  capacity Int    @default(30) // Capacidad máxima de alumnos
+
+  // Relación con el Grado
+  gradeId String
+  grade   Grade  @relation(fields: [gradeId], references: [id], onDelete: Cascade)
+
+  // Aquí en el futuro enlazaremos a los estudiantes y la malla curricular
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  courses     Course[]
+  schedules   Schedule[]
+  enrollments Enrollment[]
+  attendances Attendance[]
+
+  @@unique([gradeId, name, shift]) // No puede haber dos "A" en el mismo grado y turno
+  @@map("classrooms")
+}
+
+model Course {
+  id String @id @default(uuid())
+
+  // Relaciones
+  classroomId String
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+
+  subjectId String
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+
+  teacherId String? // Puede ser nulo si aún no se ha asignado docente
+  teacher   User?   @relation("TeacherCourses", fields: [teacherId], references: [id], onDelete: SetNull)
+
+  // Opcional: Para controlar si la materia se dicta este año (pensando en el futuro)
+  academicYear Int @default(2024)
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  users       User[]
+  schedules   Schedule[]
+  evaluations Evaluation[]
+
+  // No se puede dictar la misma materia dos veces en el mismo paralelo en el mismo año
+  @@unique([classroomId, subjectId, academicYear])
+  @@map("courses")
+}
+
+model Schedule {
+  id String @id @default(uuid())
+
+  dayOfWeek Int // 1 = Lunes, 2 = Martes, ..., 5 = Viernes
+  period    Int // 1 al 6 (los bloques de 40 min)
+
+  // Relaciones
+  classroomId String
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+
+  courseId String
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Regla: Un aula no puede tener dos clases en el mismo día y a la misma hora
+  @@unique([classroomId, dayOfWeek, period])
+  @@map("schedules")
+}
+
+model StudentProfile {
+  id String @id @default(uuid())
+
+  // Relación 1 a 1 con el Usuario base
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Datos Personales
+  birthDate  DateTime
+  documentId String   @unique // Carnet de Identidad (CI)
+  gender     String // MASCULINO, FEMENINO
+  address    String
+
+  // Datos Médicos
+  bloodType    String? // Ej: O+, A-
+  allergies    String? @db.Text
+  medicalNotes String? @db.Text
+
+  // Contacto de Emergencia (Tutor/Padre)
+  guardianName     String
+  guardianPhone    String
+  guardianEmail    String?
+  guardianRelation String // Ej: PADRE, MADRE, TÍO
+
+  // Relaciones
+  enrollments Enrollment[]
+  attendances Attendance[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  marks     Mark[]
+
+  @@map("student_profiles")
+}
+
+// 6. Inscripciones (Matriculación a un aula específica en un año)
+model Enrollment {
+  id String @id @default(uuid())
+
+  academicYear Int    @default(2024)
+  status       String @default("ACTIVE") // ACTIVE, WITHDRAWN, TRANSFERRED
+
+  // Relaciones
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  classroomId String
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Un estudiante solo puede estar inscrito en un aula por año
+  @@unique([studentId, academicYear])
+  @@map("enrollments")
+}
+
+// --- ENUMS ---
+enum AttendanceStatus {
+  PRESENT // Presente
+  ABSENT // Falta
+  LATE // Atraso
+  EXCUSED // Licencia / Permiso
+}
+
+// --- NUEVO MODELO: ASISTENCIA ---
+model Attendance {
+  id     String           @id @default(uuid())
+  date   DateTime         @db.Date // Guardamos solo la fecha, sin horas
+  status AttendanceStatus @default(PRESENT)
+  notes  String?          @db.Text // Ej: "Trajo certificado médico"
+
+  // Relación con el Estudiante
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  // Relación con el Aula
+  classroomId String
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+
+  // Auditoría: ¿Qué usuario (docente/admin) tomó la lista?
+  recordedById String?
+  recordedBy   User?   @relation("RecordedAttendances", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // REGLA ESTRICTA: Un estudiante solo puede tener un registro por día en un aula específica
+  @@unique([studentId, classroomId, date])
+  @@map("attendances")
+}
+
+enum Term {
+  TRIMESTRE_1
+  TRIMESTRE_2
+  TRIMESTRE_3
+  RECUPERATORIO
+}
+
+// Evaluación (Una tarea, examen o proyecto creado por el profesor)
+model Evaluation {
+  id          String   @id @default(uuid())
+  title       String // Ej: "Examen Final de Álgebra"
+  description String?  @db.Text
+  date        DateTime @db.Date // Fecha de la evaluación
+  term        Term     @default(TRIMESTRE_1)
+  maxScore    Float    @default(100) // Generalmente sobre 100 puntos
+
+  // ¿A qué asignatura/curso pertenece esta evaluación?
+  courseId String
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  // Auditoría: ¿Qué docente la creó?
+  createdById String
+  createdBy   User   @relation("CreatedEvaluations", fields: [createdById], references: [id])
+
+  // Las notas de los estudiantes en esta evaluación
+  marks Mark[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("evaluations")
+}
+
+// Nota (El puntaje específico de un alumno en una Evaluación)
+model Mark {
+  id       String  @id @default(uuid())
+  score    Float // La nota (Ej: 85.5)
+  feedback String? @db.Text // Comentario del profesor (Ej: "Excelente progreso")
+
+  // Relaciones
+  evaluationId String
+  evaluation   Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Regla: Un estudiante solo tiene UNA nota por evaluación
+  @@unique([evaluationId, studentId])
+  @@map("marks")
+}
+
+// Enum para decidir quién puede ver el comunicado
+enum AnnouncementTarget {
+  ALL // Todos (Profesores y Estudiantes)
+  TEACHERS // Solo Profesores
+  STUDENTS // Solo Estudiantes
+}
+
+model Announcement {
+  id          String             @id @default(uuid())
+  title       String
+  content     String             @db.Text
+  target      AnnouncementTarget @default(ALL)
+  isImportant Boolean            @default(false)
+
+  // Quién lo publicó (Generalmente el Admin/Director)
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  notificationReads NotificationRead[]
+
+  @@map("announcements")
+}
+
+// Registro de lecturas de notificaciones
+model NotificationRead {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  readAt DateTime @default(now())
+
+  // Un usuario solo puede tener un registro de lectura por comunicado
+  @@unique([userId, announcementId])
+  @@map("notification_reads")
+}

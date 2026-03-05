@@ -38,5 +38,30 @@ export const courseService = {
     removeCourse: async (id: string) => {
         // Validaremos en el futuro si hay notas antes de borrar
         return await courseRepository.delete(id);
-    }
+    },
+
+    getTeacherCourses: async (teacherId?: string) => {
+        const whereClause = teacherId ? { teacherId } : {};
+
+        return await prisma.course.findMany({
+            where: {
+                ...whereClause,
+                academicYear: new Date().getFullYear() // Solo del año actual
+            },
+            include: {
+                subject: true,
+                classroom: {
+                    include: { grade: true }
+                },
+                _count: {
+                    select: { evaluations: true } // Contar cuántos exámenes ya tomó
+                }
+            },
+            orderBy: [
+                { classroom: { grade: { level: 'asc' } } },
+                { classroom: { grade: { numericOrder: 'asc' } } },
+                { subject: { name: 'asc' } }
+            ]
+        });
+    },
 };
