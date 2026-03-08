@@ -1,74 +1,47 @@
-import { prisma } from "@/lib/db";
+// app/admin/dashboard/page.tsx
 import Link from "next/link";
 import { Users, BookOpen, Clock, AlertTriangle, ArrowRight, UserPlus, CheckCircle } from "lucide-react";
 
 import { getAnnouncementsAction } from "@/features/announcements/actions/announcement.action";
 import NoticeBoard from "@/features/announcements/components/notice-board";
 import CreateAnnouncementModal from "@/features/announcements/components/create-announcement-modal";
-// 1. IMPORTAMOS EL SERVICIO DE GESTIÓN ACADÉMICA
 import { academicYearService } from "@/features/academic/services/academic-year.service";
+// 1. IMPORTAMOS NUESTRO CLIENTE API
+import { apiFetch } from "../../../app/lib/api-client";
 
-// Forzamos que la página sea dinámica para que los datos siempre estén frescos
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage({ searchParams }: { searchParams: Promise<{ action?: string }> }) {
-    // Capturamos el parámetro de la URL para saber si abrir el modal
     const { action } = await searchParams;
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Medianoche de hoy
 
-    // 2. OBTENEMOS LA GESTIÓN ACTIVA (La Máquina del Tiempo)
+    // 2. OBTENEMOS LA GESTIÓN ACTIVA
     const activeYear = await academicYearService.getActiveYear();
 
-    // 3. Obtener Métricas Rápidas y Comunicados usando activeYear
-    const [
-        totalStudents,
-        totalTeachers,
-        totalClassrooms,
-        todayAttendances,
-        announcementsRes
-    ] = await Promise.all([
-        prisma.enrollment.count({ where: { academicYear: activeYear, status: "ACTIVE" } }), // Filtrado por año
-        prisma.user.count({ where: { role: "TEACHER", status: "ACTIVE" } }),
-        prisma.classroom.count(),
-        prisma.attendance.findMany({ where: { date: today } }), // La asistencia de "hoy" es literal hoy.
-        getAnnouncementsAction()
+    // 3. OBTENER DATOS DE LA API (En paralelo para mayor velocidad)
+    // Usamos catch para evitar que un error en un bloque rompa todo el dashboard
+    const [summaryRes, announcementsRes, failingMarksRes] = await Promise.all([
+        apiFetch<any>(`/dashboard/admin/summary?academicYear=${activeYear}`).catch(() => null),
+        getAnnouncementsAction(),
+        apiFetch<any[]>(`/dashboard/admin/alerts/failing-marks?academicYear=${activeYear}&limit=5`).catch(() => [])
     ]);
 
-    const announcements = announcementsRes.data || [];
-
-    // Calcular estadísticas de asistencia de hoy
-    const attendanceStats = {
-        present: todayAttendances.filter(a => a.status === "PRESENT").length,
-        absent: todayAttendances.filter(a => a.status === "ABSENT").length,
-        late: todayAttendances.filter(a => a.status === "LATE").length,
-        excused: todayAttendances.filter(a => a.status === "EXCUSED").length,
+    // Extraemos los datos con valores por defecto en caso de que la API falle
+    const summary = summaryRes || {
+        totalStudents: 0,
+        totalTeachers: 0,
+        totalClassrooms: 0,
+        totalRecordedToday: 0,
+        attendanceStats: { present: 0, absent: 0, late: 0, excused: 0 }
     };
-    const totalRecordedToday = todayAttendances.length;
 
-    // 4. Obtener "Alumnos en Riesgo" filtrando por la gestión activa
-    const failingMarks = await prisma.mark.findMany({
-        where: {
-            score: { lt: 51 },
-            evaluation: {
-                course: {
-                    academicYear: activeYear // Mejorado: Ahora busca exactamente en los cursos de este año
-                }
-            }
-        },
-        include: {
-            student: { include: { user: true } },
-            evaluation: { include: { course: { include: { subject: true } } } }
-        },
-        take: 5, // Mostramos solo los 5 más recientes para no saturar
-        orderBy: { createdAt: 'desc' }
-    });
+    const announcements = announcementsRes.data || [];
+    const failingMarks = failingMarksRes || [];
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
 
-            {/* Modal para nuevos comunicados */}
             <CreateAnnouncementModal isOpen={action === "new-notice"} />
 
             {/* Header / Bienvenida */}
@@ -86,28 +59,28 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
                 <div className="bg-uecg-black text-white p-6 relative overflow-hidden group">
                     <Users size={80} className="absolute -bottom-4 -right-4 opacity-10 group-hover:scale-110 transition-transform" />
                     <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Estudiantes Activos</h3>
-                    <span className="block text-5xl font-black font-mono leading-none">{totalStudents}</span>
+                    <span className="block text-5xl font-black font-mono leading-none">{summary.totalStudents}</span>
                     <span className="text-xs font-bold text-gray-300 uppercase tracking-widest mt-4 block">Matriculados en {activeYear}</span>
                 </div>
 
                 <div className="bg-uecg-blue text-white p-6 relative overflow-hidden group">
                     <BookOpen size={80} className="absolute -bottom-4 -right-4 opacity-10 group-hover:scale-110 transition-transform" />
                     <h3 className="text-[10px] font-black uppercase tracking-widest text-blue-200 mb-2">Plantel Docente</h3>
-                    <span className="block text-5xl font-black font-mono leading-none">{totalTeachers}</span>
+                    <span className="block text-5xl font-black font-mono leading-none">{summary.totalTeachers}</span>
                     <span className="text-xs font-bold text-blue-200 uppercase tracking-widest mt-4 block">Profesores registrados</span>
                 </div>
 
                 <div className="bg-white border-4 border-uecg-black text-uecg-black p-6 relative overflow-hidden group">
                     <div className="w-24 h-24 bg-gray-100 absolute -bottom-4 -right-4 rotate-12 group-hover:rotate-0 transition-transform" />
                     <h3 className="text-[10px] font-black uppercase tracking-widest text-uecg-gray mb-2">Aulas Operativas</h3>
-                    <span className="block text-5xl font-black font-mono leading-none relative z-10">{totalClassrooms}</span>
+                    <span className="block text-5xl font-black font-mono leading-none relative z-10">{summary.totalClassrooms}</span>
                     <span className="text-xs font-bold text-uecg-gray uppercase tracking-widest mt-4 block relative z-10">Paralelos creados</span>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-                {/* Columna Izquierda (Doble ancho): Asistencia, Accesos Directos y COMUNICADOS */}
+                {/* Columna Izquierda (Doble ancho) */}
                 <div className="lg:col-span-2 space-y-8">
 
                     {/* Sección: Estado de Asistencia de Hoy */}
@@ -122,27 +95,24 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
                         </div>
 
                         <div className="p-6">
-                            {totalRecordedToday === 0 ? (
+                            {summary.totalRecordedToday === 0 ? (
                                 <div className="text-center py-8">
                                     <span className="block text-uecg-gray text-xs font-black uppercase tracking-widest mb-2">Sin registros aún</span>
                                     <p className="text-sm font-bold text-gray-400">Ningún docente ha tomado lista el día de hoy.</p>
                                 </div>
                             ) : (
                                 <div className="flex flex-wrap md:flex-nowrap gap-4">
-                                    {/* Presentes */}
                                     <div className="flex-1 bg-green-50 border-2 border-green-200 p-4 text-center">
                                         <span className="block text-[10px] font-black uppercase tracking-widest text-green-700 mb-1">Presentes</span>
-                                        <span className="block text-3xl font-black text-green-700 font-mono">{attendanceStats.present}</span>
+                                        <span className="block text-3xl font-black text-green-700 font-mono">{summary.attendanceStats.present}</span>
                                     </div>
-                                    {/* Faltas */}
                                     <div className="flex-1 bg-red-50 border-2 border-red-200 p-4 text-center">
                                         <span className="block text-[10px] font-black uppercase tracking-widest text-red-700 mb-1">Faltas</span>
-                                        <span className="block text-3xl font-black text-red-700 font-mono">{attendanceStats.absent}</span>
+                                        <span className="block text-3xl font-black text-red-700 font-mono">{summary.attendanceStats.absent}</span>
                                     </div>
-                                    {/* Atrasos */}
                                     <div className="flex-1 bg-orange-50 border-2 border-orange-200 p-4 text-center">
                                         <span className="block text-[10px] font-black uppercase tracking-widest text-orange-700 mb-1">Atrasos</span>
-                                        <span className="block text-3xl font-black text-orange-700 font-mono">{attendanceStats.late}</span>
+                                        <span className="block text-3xl font-black text-orange-700 font-mono">{summary.attendanceStats.late}</span>
                                     </div>
                                 </div>
                             )}
@@ -196,7 +166,6 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
                                                     {mark.score}
                                                 </div>
                                             </div>
-                                            {/* Link al expediente */}
                                             <Link
                                                 href={`/admin/students/${mark.studentId}`}
                                                 className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-red-500 hover:text-red-700 mt-3"
