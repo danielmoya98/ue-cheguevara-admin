@@ -40,27 +40,31 @@ export const courseService = {
         return await courseRepository.delete(id);
     },
 
-    getTeacherCourses: async (teacherId?: string) => {
+    getTeacherCourses: async (teacherId?: string, activeYear?: number) => {
+        // Si no se envía un activeYear (por seguridad o error en otra vista), usamos el año actual como fallback.
+        const yearToSearch = activeYear || new Date().getFullYear();
+
         const whereClause = teacherId ? { teacherId } : {};
 
-        return await prisma.course.findMany({
+        return prisma.course.findMany({
             where: {
                 ...whereClause,
-                academicYear: new Date().getFullYear() // Solo del año actual
+                // ✅ CORREGIDO: Buscamos en el año de la "Máquina del Tiempo", no en el calendario actual
+                academicYear: yearToSearch
             },
             include: {
                 subject: true,
                 classroom: {
-                    include: { grade: true }
+                    include: {grade: true}
                 },
                 _count: {
-                    select: { evaluations: true } // Contar cuántos exámenes ya tomó
+                    select: {evaluations: true} // Contar cuántos exámenes ya tomó
                 }
             },
             orderBy: [
-                { classroom: { grade: { level: 'asc' } } },
-                { classroom: { grade: { numericOrder: 'asc' } } },
-                { subject: { name: 'asc' } }
+                {classroom: {grade: {level: 'asc'}}},
+                {classroom: {grade: {numericOrder: 'asc'}}},
+                {subject: {name: 'asc'}}
             ]
         });
     },

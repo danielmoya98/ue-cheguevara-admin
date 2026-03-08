@@ -5,14 +5,14 @@ import { BulkAttendanceInput } from "../validations/attendance.schema";
 export const attendanceService = {
 
     // Obtiene la lista de estudiantes del aula mezclada con su asistencia (si ya se tomó ese día)
-    getAttendanceRoster: async (classroomId: string, dateString: string) => {
+    getAttendanceRoster: async (classroomId: string, dateString: string, activeYear: number) => {
         const targetDate = new Date(`${dateString}T00:00:00Z`); // Aseguramos medianoche UTC
 
-        // 1. Obtenemos a los estudiantes activos en esa aula este año
+        // 1. Obtenemos a los estudiantes activos en esa aula EN LA GESTIÓN SOLICITADA
         const enrollments = await prisma.enrollment.findMany({
             where: {
                 classroomId,
-                academicYear: new Date().getFullYear(),
+                academicYear: activeYear, // ✅ CORREGIDO: Usamos la máquina del tiempo, no new Date()
                 status: "ACTIVE"
             },
             include: {

@@ -4,9 +4,12 @@ import { revalidatePath } from "next/cache";
 import { studentService } from "../services/student.service";
 import { enrollmentSchema, studentProfileSchema } from "../validations/student.schema";
 
-export async function getStudentsAction(query?: string, classroomId?: string) {
+
+
+export async function getStudentsAction(query?: string, activeYear?: number, classroomId?: string) {
     try {
-        const students = await studentService.getStudents(query, classroomId);
+        // Pasamos el activeYear al servicio para que filtre la base de datos
+        const students = await studentService.getStudents(query, activeYear, classroomId);
         return { success: true, data: students };
     } catch (error) {
         return { success: false, error: "Error al cargar estudiantes" };

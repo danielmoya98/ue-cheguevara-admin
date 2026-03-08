@@ -26,11 +26,7 @@ export default async function TeacherCourseNotebookPage(props: { params: Promise
     return (
         <div className="space-y-8 animate-in fade-in duration-500 relative">
 
-            {/* REUTILIZAMOS EL MODAL DEL ADMIN
-                Nota: Necesitamos un pequeño ajuste en el modal para que sepa a dónde volver
-                (si a /admin/grades/course/... o a /teacher/courses/...)
-                Para simplificar, dejaremos que vuelva usando router.back() o le pasaremos una prop de retorno.
-            */}
+
             <CreateEvaluationModal
                 courseId={courseId}
                 isOpen={action === "create"}

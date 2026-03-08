@@ -1,24 +1,26 @@
 import { prisma } from "@/lib/db";
 import { cookies } from "next/headers";
-import { CheckCircle, Calendar, Users, AlertTriangle, Info } from "lucide-react";
-// Importamos el componente de planilla que creamos para el Admin
+import { CheckCircle, CalendarDays, Users, AlertTriangle, Info } from "lucide-react";
 import AttendanceSheet from "@/features/attendance/components/attendance-sheet";
+// 1. IMPORTAMOS LOS SERVICIOS
+import { academicYearService } from "@/features/academic/services/academic-year.service";
+import { attendanceService } from "@/features/attendance/services/attendance.service";
 
 export const dynamic = "force-dynamic";
 
 export default async function TeacherAttendancePage(props: { searchParams: Promise<{ date?: string, classroomId?: string }> }) {
     const searchParams = await props.searchParams;
-    const selectedDateStr = searchParams?.date || new Date().toISOString().split('T')[0];
+    const selectedDateStr = searchParams?.date || new Date().toLocaleDateString('en-CA'); // 'en-CA' da formato YYYY-MM-DD local
     const selectedClassroomId = searchParams?.classroomId;
 
-    // 1. Identificar al Profesor logueado
-    // (Asegúrate de poner un ID válido para probar si aún no conectas el login real)
-    const userId = (await cookies()).get("uecg_session")?.value || "74084bb7-1f04-481a-9f30-282d8d37f054";
-    const currentYear = new Date().getFullYear();
+    const userId = (await cookies()).get("uecg_session")?.value || "";
 
-    // 2. CANDADO DE SEGURIDAD: Obtener solo las aulas donde dicta clases este profesor
+    // 2. OBTENEMOS LA GESTIÓN ACTIVA (Máquina del tiempo)
+    const activeYear = await academicYearService.getActiveYear();
+
+    // 3. Obtenemos solo las aulas donde el profesor dicta clases EN ESTA GESTIÓN
     const teacherCourses = await prisma.course.findMany({
-        where: { teacherId: userId, academicYear: currentYear },
+        where: { teacherId: userId, academicYear: activeYear },
         select: { classroomId: true }
     });
 
@@ -35,49 +37,28 @@ export default async function TeacherAttendancePage(props: { searchParams: Promi
         ]
     });
 
-    // 3. Obtener la lista de alumnos y sus asistencias si hay un aula seleccionada
+    // 4. Obtener la planilla (roster) usando el SERVICIO CENTRALIZADO
     let roster: any[] = [];
     let selectedClassroomData = null;
 
-    // Verificamos que el ID seleccionado esté en su lista permitida
+    // Verificamos que el ID seleccionado esté en su lista permitida (Seguridad)
     if (selectedClassroomId && allowedClassroomIds.includes(selectedClassroomId)) {
         selectedClassroomData = allowedClassrooms.find(c => c.id === selectedClassroomId);
 
-        // Alumnos matriculados en esta aula
-        const enrollments = await prisma.enrollment.findMany({
-            where: { classroomId: selectedClassroomId, academicYear: currentYear, status: "ACTIVE" },
-            include: { student: { include: { user: true } } },
-            orderBy: { student: { user: { name: 'asc' } } }
-        });
-
-        // Registros de asistencia existentes para la fecha seleccionada
-        const attendances = await prisma.attendance.findMany({
-            where: {
-                classroomId: selectedClassroomId,
-                date: new Date(selectedDateStr)
-            }
-        });
-
-        // Mezclar alumnos con sus registros
-        roster = enrollments.map(enrollment => {
-            const record = attendances.find(a => a.studentId === enrollment.studentId);
-            return {
-                student: enrollment.student,
-                attendance: record || null
-            };
-        });
+        // ¡LA MAGIA! Reutilizamos el servicio que reparamos hace un momento, pasándole el año activo
+        roster = await attendanceService.getAttendanceRoster(selectedClassroomId, selectedDateStr, activeYear);
     }
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500 relative">
 
-            {/* Header */}
+            {/* Header Estilo Suizo */}
             <div className="border-b-4 border-uecg-black pb-6">
                 <h1 className="text-3xl font-black text-uecg-black uppercase tracking-tighter leading-none mb-2">
                     Control de Asistencia
                 </h1>
-                <p className="text-uecg-gray font-bold text-xs uppercase tracking-widest mt-2 flex items-center gap-2">
-                    <CheckCircle size={14} /> Registro Diario • Mis Aulas
+                <p className="text-uecg-gray font-bold text-[10px] uppercase tracking-[0.2em] mt-2 flex items-center gap-2">
+                    <CheckCircle size={14} /> Registro Diario • Mis Aulas • Gestión {activeYear}
                 </p>
             </div>
 
@@ -87,29 +68,30 @@ export default async function TeacherAttendancePage(props: { searchParams: Promi
 
                     {/* Selector de Fecha */}
                     <div>
-                        <label className="text-[10px] font-black uppercase tracking-widest text-uecg-gray mb-2 flex items-center gap-2">
-                            <Calendar size={14} /> Fecha del Registro
+                        <label className="text-[10px] font-black uppercase tracking-[0.15em] text-uecg-gray mb-2 flex items-center gap-2">
+                            <CalendarDays size={14} /> Fecha del Registro
                         </label>
                         <input
                             type="date"
                             name="date"
                             defaultValue={selectedDateStr}
-                            className="w-full border-2 border-gray-300 p-3 text-sm font-bold text-uecg-black uppercase focus:border-uecg-blue outline-none transition-colors"
+                            required
+                            className="w-full border-2 border-gray-300 bg-white p-3 font-bold text-uecg-black uppercase focus:border-uecg-black outline-none transition-colors text-sm"
                         />
                     </div>
 
                     {/* Selector de Aula (Filtrado por el Candado) */}
                     <div className="md:col-span-2 flex gap-4 items-end">
                         <div className="flex-1">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-uecg-gray mb-2 flex items-center gap-2">
+                            <label className="text-[10px] font-black uppercase tracking-[0.15em] text-uecg-gray mb-2 flex items-center gap-2">
                                 <Users size={14} /> Seleccionar Aula
                             </label>
-                            <div className="relative">
+                            <div className="relative border-2 border-gray-300 bg-white focus-within:border-uecg-black transition-colors">
                                 <select
                                     name="classroomId"
                                     defaultValue={selectedClassroomId || ""}
                                     required
-                                    className="w-full border-2 border-gray-300 p-3 text-sm font-bold text-uecg-black uppercase focus:border-uecg-blue outline-none transition-colors appearance-none bg-transparent relative z-10 cursor-pointer"
+                                    className="w-full p-3 font-bold text-uecg-black bg-transparent outline-none appearance-none cursor-pointer z-10 relative text-xs uppercase"
                                 >
                                     <option value="" disabled>-- Elija un aula asignada --</option>
                                     {allowedClassrooms.map(classroom => (
@@ -124,7 +106,7 @@ export default async function TeacherAttendancePage(props: { searchParams: Promi
 
                         <button
                             type="submit"
-                            className="bg-uecg-black text-white font-black uppercase tracking-widest text-xs px-8 py-3 h-[48px] border-2 border-uecg-black hover:bg-uecg-blue hover:border-uecg-blue transition-colors"
+                            className="bg-uecg-black text-white font-black uppercase tracking-widest text-[10px] px-8 py-[14px] border-2 border-uecg-black hover:bg-uecg-blue hover:border-uecg-blue transition-colors"
                         >
                             Cargar Lista
                         </button>
@@ -137,22 +119,27 @@ export default async function TeacherAttendancePage(props: { searchParams: Promi
                 <>
                     {/* Seguridad: Mensaje si alguien intenta modificar la URL con un aula que no le toca */}
                     {!selectedClassroomData ? (
-                        <div className="bg-red-50 border-2 border-red-200 p-6 flex items-start gap-4">
-                            <AlertTriangle className="text-red-500 mt-1" size={24} />
+                        <div className="bg-red-50 border-2 border-red-200 p-6 flex items-start gap-4 shadow-sm">
+                            <AlertTriangle className="text-red-600 mt-1" size={24} strokeWidth={2.5} />
                             <div>
                                 <h3 className="text-sm font-black uppercase tracking-widest text-red-700 mb-1">Acceso Denegado</h3>
-                                <p className="text-xs font-bold text-red-600/80 uppercase">
+                                <p className="text-[10px] font-bold text-red-600/80 uppercase tracking-widest">
                                     No tiene permisos para tomar asistencia en esta aula. Comuníquese con administración si cree que es un error.
                                 </p>
                             </div>
                         </div>
                     ) : (
                         /* LA MAGIA: Reutilizamos el Componente de la Planilla */
-                        <div className="mt-8">
-                            <div className="mb-4 flex items-center gap-2 text-uecg-gray border-l-4 border-uecg-blue pl-3">
-                                <Info size={16} className="text-uecg-blue" />
-                                <span className="text-xs font-bold uppercase tracking-widest text-uecg-black">
-                                    Registrando asistencia para: {selectedClassroomData.grade.name} "{selectedClassroomData.name}"
+                        <div className="mt-8 animate-in slide-in-from-bottom-4 duration-500">
+                            <div className="mb-4 flex items-center justify-between border-b-2 border-uecg-line pb-4">
+                                <div className="flex items-center gap-2 border-l-4 border-uecg-blue pl-3">
+                                    <Info size={16} className="text-uecg-blue" strokeWidth={3} />
+                                    <span className="text-xs font-black uppercase tracking-widest text-uecg-black">
+                                        Registrando: {selectedClassroomData.grade.name} "{selectedClassroomData.name}"
+                                    </span>
+                                </div>
+                                <span className="bg-uecg-black text-white px-4 py-2 text-[9px] font-black uppercase tracking-widest hidden md:block">
+                                    {new Date(selectedDateStr + 'T12:00:00').toLocaleDateString('es-BO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                                 </span>
                             </div>
 
@@ -166,9 +153,9 @@ export default async function TeacherAttendancePage(props: { searchParams: Promi
                 </>
             ) : (
                 /* Estado Vacío: Antes de seleccionar un aula */
-                <div className="p-16 text-center border-4 border-dashed border-gray-200 bg-white">
-                    <span className="font-black text-uecg-gray uppercase tracking-widest text-sm block mb-2">Seleccione un Aula</span>
-                    <span className="text-xs font-bold text-gray-400 uppercase">Use el panel superior para cargar la lista de estudiantes.</span>
+                <div className="p-16 text-center border-4 border-dashed border-gray-200 bg-gray-50">
+                    <span className="font-black text-uecg-gray uppercase tracking-widest text-lg block mb-2">Seleccione un Aula</span>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Use el panel superior para cargar la lista de estudiantes matriculados en {activeYear}.</span>
                 </div>
             )}
         </div>

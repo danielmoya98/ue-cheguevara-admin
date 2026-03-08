@@ -1,12 +1,12 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { sessionService } from "../../../app/lib/session";
 
 export async function logoutAction() {
-    // Destruir sesión
-    (await cookies()).delete("uecg_session");
+    // Usamos el servicio centralizado para limpiar ambos tokens
+    await sessionService.clearSession();
 
-    // Redirigir al login
+    // Redirigimos al inicio
     redirect("/login");
 }

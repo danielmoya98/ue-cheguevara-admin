@@ -10,9 +10,10 @@ const initialState = { success: false, message: "" };
 
 interface EnrollmentModalProps {
     classrooms: any[]; // La lista de paralelos agrupados
+    activeYear: number; // NUEVA PROPIEDAD: El año de la máquina del tiempo
 }
 
-export default function EnrollmentModal({ classrooms }: EnrollmentModalProps) {
+export default function EnrollmentModal({ classrooms, activeYear }: EnrollmentModalProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
 
@@ -34,26 +35,31 @@ export default function EnrollmentModal({ classrooms }: EnrollmentModalProps) {
         }
     }, [state]);
 
-    const labelClass = "text-xs font-black uppercase tracking-[0.15em] text-uecg-black mb-2 block";
-    const selectWrapperClass = "relative border-2 border-gray-300 bg-white focus-within:border-uecg-blue transition-colors";
-
-    // Año actual por defecto
-    const currentYear = new Date().getFullYear();
+    const labelClass = "text-[10px] font-black uppercase tracking-[0.2em] text-uecg-gray mb-2 block";
+    const selectWrapperClass = "relative border-2 border-gray-300 bg-white focus-within:border-uecg-black transition-colors";
 
     return (
         <Modal title="Matricular Estudiante" isOpen={isOpen} onClose={handleClose}>
             <form action={formAction} className="space-y-6">
                 <input type="hidden" name="studentId" value={studentId || ""} />
 
-                <div className="bg-blue-50 border-l-4 border-uecg-blue p-4 mb-6">
-                    <p className="text-sm font-bold text-uecg-black">Gestión {currentYear}</p>
-                    <p className="text-xs text-uecg-gray mt-1">Al matricular, el estudiante será asignado a la malla curricular de esta aula inmediatamente.</p>
+                {/* 1. CAMPO OCULTO ACTUALIZADO AL AÑO DINÁMICO */}
+                <input type="hidden" name="academicYear" value={activeYear} />
+
+                {/* 2. ALERTA VISUAL ACTUALIZADA */}
+                <div className="bg-gray-50 border-l-4 border-uecg-blue p-4 mb-6">
+                    <p className="text-sm font-black text-uecg-black uppercase tracking-widest">
+                        Gestión {activeYear}
+                    </p>
+                    <p className="text-[10px] font-bold text-uecg-gray mt-1 uppercase tracking-wider">
+                        El estudiante será asignado a la malla curricular de esta aula para el año seleccionado.
+                    </p>
                 </div>
 
                 <div>
                     <label className={labelClass}>Seleccionar Curso (Aula)</label>
                     <div className={selectWrapperClass}>
-                        <select name="classroomId" className="w-full p-3 font-bold text-uecg-black bg-transparent outline-none appearance-none cursor-pointer z-10 relative text-sm" required defaultValue="">
+                        <select name="classroomId" className="w-full p-4 font-bold text-uecg-black bg-transparent outline-none appearance-none cursor-pointer z-10 relative text-xs uppercase" required defaultValue="">
                             <option value="" disabled>Elige el paralelo correspondiente...</option>
 
                             {/* Agrupamos por Nivel y Grado para que sea fácil de encontrar */}
@@ -71,12 +77,19 @@ export default function EnrollmentModal({ classrooms }: EnrollmentModalProps) {
                     </div>
                 </div>
 
-                {/* Campo oculto para el año académico */}
-                <input type="hidden" name="academicYear" value={currentYear} />
-
                 <div className="flex gap-4 pt-6 border-t-2 border-uecg-line mt-8">
-                    <button type="button" onClick={handleClose} className="flex-1 py-4 border-2 border-gray-300 text-xs font-black uppercase tracking-widest text-gray-500 hover:border-uecg-black hover:text-uecg-black transition-all">Cancelar</button>
-                    <button type="submit" disabled={isPending} className="flex-1 py-4 bg-uecg-blue text-white text-xs font-black uppercase tracking-widest hover:bg-uecg-dark transition-all disabled:opacity-50 border-2 border-uecg-blue">
+                    <button
+                        type="button"
+                        onClick={handleClose}
+                        className="flex-1 py-4 border-2 border-gray-300 text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 hover:border-uecg-black hover:text-uecg-black transition-all"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={isPending}
+                        className="flex-1 py-4 bg-uecg-blue text-white text-[10px] font-black uppercase tracking-[0.2em] hover:bg-uecg-black transition-all disabled:opacity-50 border-2 border-uecg-blue hover:border-uecg-black"
+                    >
                         {isPending ? "Procesando..." : "Confirmar Matrícula"}
                     </button>
                 </div>

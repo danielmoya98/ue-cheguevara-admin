@@ -2,6 +2,8 @@ import { getGradesAction } from "@/features/academic/actions/grade.action";
 import { attendanceService } from "@/features/attendance/services/attendance.service";
 import AttendanceSheet from "@/features/attendance/components/attendance-sheet";
 import { CalendarDays, Users } from "lucide-react";
+// 1. IMPORTAMOS EL SERVICIO DE LA MÁQUINA DEL TIEMPO
+import { academicYearService } from "@/features/academic/services/academic-year.service";
 
 interface PageProps {
     searchParams: Promise<{ [key: string]: string | undefined }>
@@ -10,32 +12,35 @@ interface PageProps {
 export default async function AttendancePage({ searchParams }: PageProps) {
     const params = await searchParams;
 
-    // 1. Obtener parámetros de búsqueda
-    // Si no hay fecha en la URL, usamos la fecha de hoy por defecto (en formato YYYY-MM-DD local)
+    // 2. OBTENEMOS LA GESTIÓN ACTIVA DEL USUARIO
+    const activeYear = await academicYearService.getActiveYear();
+
+    // 3. Obtener parámetros de búsqueda
     const today = new Date().toLocaleDateString('en-CA'); // 'en-CA' da formato YYYY-MM-DD
     const dateParam = params.date || today;
     const classroomIdParam = params.classroomId;
 
-    // 2. Obtener la lista de aulas para el menú desplegable
+    // 4. Obtener la lista de aulas para el menú desplegable
     const { data: grades, success } = await getGradesAction();
     const gradesWithClassrooms = (grades || []).filter(g => g.classrooms.length > 0);
 
-    // 3. Si hay un aula seleccionada, buscar la planilla
+    // 5. Si hay un aula seleccionada, buscar la planilla filtrada por el AÑO ACTIVO
     let roster: any[] = [];
     if (classroomIdParam) {
-        roster = await attendanceService.getAttendanceRoster(classroomIdParam, dateParam);
+        // AQUÍ ESTÁ LA MAGIA: Le pasamos activeYear al servicio
+        roster = await attendanceService.getAttendanceRoster(classroomIdParam, dateParam, activeYear);
     }
 
     return (
-        <div className="space-y-8 relative">
+        <div className="space-y-8 relative animate-in fade-in duration-500">
 
-            {/* Header */}
+            {/* Header Estilo Suizo */}
             <div className="border-b-4 border-uecg-black pb-6">
                 <h1 className="text-3xl font-black text-uecg-black uppercase tracking-tighter leading-none mb-2">
                     Control de Asistencia
                 </h1>
-                <p className="text-uecg-gray font-bold text-xs uppercase tracking-widest mt-2">
-                    Registro diario por aulas y gestión escolar.
+                <p className="text-uecg-gray font-bold text-[10px] uppercase tracking-[0.2em] mt-2 flex items-center gap-2">
+                    <CalendarDays size={14} /> Gestión Académica {activeYear}
                 </p>
             </div>
 
@@ -45,7 +50,7 @@ export default async function AttendancePage({ searchParams }: PageProps) {
 
                     {/* Filtro: Fecha */}
                     <div>
-                        <label className="text-[10px] font-black uppercase tracking-[0.15em] text-uecg-gray mb-2 block flex items-center gap-2">
+                        <label className="text-[10px] font-black uppercase tracking-[0.15em] text-uecg-gray mb-2 flex items-center gap-2">
                             <CalendarDays size={14} /> Fecha de Registro
                         </label>
                         <input
@@ -53,22 +58,22 @@ export default async function AttendancePage({ searchParams }: PageProps) {
                             name="date"
                             defaultValue={dateParam}
                             required
-                            className="w-full border-2 border-gray-300 bg-white p-3 font-bold text-uecg-black uppercase focus:border-uecg-blue outline-none transition-colors text-sm"
+                            className="w-full border-2 border-gray-300 bg-white p-3 font-bold text-uecg-black uppercase focus:border-uecg-black outline-none transition-colors text-sm"
                         />
                     </div>
 
                     {/* Filtro: Aula */}
                     <div className="md:col-span-2 flex gap-4 items-end">
                         <div className="flex-1">
-                            <label className="text-[10px] font-black uppercase tracking-[0.15em] text-uecg-gray mb-2 block flex items-center gap-2">
+                            <label className="text-[10px] font-black uppercase tracking-[0.15em] text-uecg-gray mb-2 flex items-center gap-2">
                                 <Users size={14} /> Aula / Paralelo
                             </label>
-                            <div className="relative border-2 border-gray-300 bg-white focus-within:border-uecg-blue transition-colors">
+                            <div className="relative border-2 border-gray-300 bg-white focus-within:border-uecg-black transition-colors">
                                 <select
                                     name="classroomId"
                                     defaultValue={classroomIdParam || ""}
                                     required
-                                    className="w-full p-3 font-bold text-uecg-black bg-transparent outline-none appearance-none cursor-pointer z-10 relative text-sm uppercase"
+                                    className="w-full p-3 font-bold text-uecg-black bg-transparent outline-none appearance-none cursor-pointer z-10 relative text-xs uppercase"
                                 >
                                     <option value="" disabled>Seleccione un aula para tomar lista...</option>
                                     {gradesWithClassrooms.map((grade) => (
@@ -86,7 +91,7 @@ export default async function AttendancePage({ searchParams }: PageProps) {
                         </div>
 
                         {/* Botón Buscar */}
-                        <button type="submit" className="px-8 py-3.5 bg-uecg-black text-white font-black uppercase tracking-widest text-sm hover:bg-uecg-blue transition-colors border-2 border-uecg-black">
+                        <button type="submit" className="px-8 py-[14px] bg-uecg-black text-white font-black uppercase tracking-widest text-[10px] hover:bg-uecg-blue transition-colors border-2 border-uecg-black hover:border-uecg-blue">
                             Cargar Planilla
                         </button>
                     </div>
@@ -97,20 +102,19 @@ export default async function AttendancePage({ searchParams }: PageProps) {
             {!classroomIdParam ? (
                 <div className="p-16 text-center border-4 border-dashed border-gray-200 bg-gray-50">
                     <span className="font-black uppercase tracking-widest text-lg text-uecg-gray block mb-2">Seleccione un Aula</span>
-                    <span className="text-sm font-bold text-gray-500 uppercase">Utilice los filtros superiores para cargar la lista de estudiantes.</span>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Utilice los filtros superiores para cargar la lista de estudiantes de {activeYear}.</span>
                 </div>
             ) : (
-                <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-lg font-black uppercase tracking-widest text-uecg-blue">
+                <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-500">
+                    <div className="flex justify-between items-center border-b-2 border-uecg-line pb-4">
+                        <h2 className="text-sm font-black uppercase tracking-widest text-uecg-blue">
                             Planilla Oficial
                         </h2>
-                        <span className="bg-uecg-black text-white px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                            {new Date(dateParam).toLocaleDateString('es-BO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                        <span className="bg-uecg-black text-white px-4 py-2 text-[9px] font-black uppercase tracking-widest">
+                            {new Date(dateParam + 'T12:00:00').toLocaleDateString('es-BO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                         </span>
                     </div>
 
-                    {/* Componente Interactivo que creamos */}
                     <AttendanceSheet
                         classroomId={classroomIdParam}
                         date={dateParam}

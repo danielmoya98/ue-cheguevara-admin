@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTransition } from "react";
 import {
     LayoutDashboard, Users, Shield, LogOut, BookOpen,
-    ChevronLeft, ChevronRight
+    ChevronLeft, ChevronRight, GraduationCap, CheckCircle,
+    PenTool, FileText
 } from "lucide-react";
 import { logoutAction } from "@/features/auth/actions/logout.action";
 import { useSidebar } from "@/shared/context/sidebar-context";
@@ -14,24 +16,31 @@ const MENU_ITEMS = [
     { name: "Usuarios", href: "/admin/users", icon: Users },
     { name: "Roles", href: "/admin/roles", icon: Shield },
     { name: "Académico", href: "/admin/academic", icon: BookOpen },
-    { name: "Estudiantes", href: "/admin/students", icon: Users },
-    { name: "Asistencia", href: "/admin/attendance", icon: Users },
-    { name: "Calificaciones", href: "/admin/grades", icon: Users },
-    { name: "Boletin", href: "/admin/bulletins", icon: Users },
-
+    { name: "Estudiantes", href: "/admin/students", icon: GraduationCap },
+    { name: "Asistencia", href: "/admin/attendance", icon: CheckCircle },
+    { name: "Calificaciones", href: "/admin/grades", icon: PenTool },
+    { name: "Boletin", href: "/admin/bulletins", icon: FileText },
+    { name: "Cierres de Gestion", href: "/admin/academic-promotion", icon: FileText },
 ];
 
 export default function Sidebar() {
     const pathname = usePathname();
     const { isCollapsed, toggleSidebar } = useSidebar();
+    const [isPending, startTransition] = useTransition();
+
+    const handleLogout = () => {
+        startTransition(() => {
+            logoutAction();
+        });
+    };
 
     return (
         <aside
             className={`
-        fixed left-0 top-0 z-50 h-screen bg-white border-r border-uecg-line flex flex-col 
-        transition-[width] duration-300 ease-in-out
-        ${isCollapsed ? "w-20" : "w-64"}
-      `}
+                fixed left-0 top-0 z-50 h-screen bg-white border-r border-uecg-line flex flex-col 
+                transition-[width] duration-300 ease-in-out
+                ${isCollapsed ? "w-20" : "w-64"}
+            `}
         >
             {/* HEADER: LOGO Y TOGGLE */}
             <div className="h-20 bg-uecg-blue flex items-center justify-between px-0 relative">
@@ -47,27 +56,27 @@ export default function Sidebar() {
                     )}
                 </div>
 
-                {/* Botón Toggle (Cuadrado Swiss Style absoluto) */}
+                {/* Botón Toggle */}
                 <button
                     onClick={toggleSidebar}
-                    className="absolute -right-3 top-1/2 -translate-y-1/2 bg-white border border-uecg-blue text-uecg-blue w-6 h-6 flex items-center justify-center hover:bg-uecg-blue hover:text-white transition-colors z-50"
+                    className="absolute -right-3 top-1/2 -translate-y-1/2 bg-white border border-uecg-blue text-uecg-blue w-6 h-6 flex items-center justify-center hover:bg-uecg-blue hover:text-white transition-colors z-50 cursor-pointer"
                     title={isCollapsed ? "Expandir" : "Colapsar"}
                 >
-                    {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+                    {isCollapsed ? <ChevronRight size={14} strokeWidth={3} /> : <ChevronLeft size={14} strokeWidth={3} />}
                 </button>
             </div>
 
             {/* NAVEGACIÓN */}
             <nav className="flex-1 flex flex-col py-6 overflow-hidden">
-                {/* Label "Menu Principal" solo visible expandido */}
+                {/* Label "Menu Principal" */}
                 <p className={`
-            px-6 text-[10px] font-bold text-uecg-gray uppercase tracking-[0.2em] mb-4 transition-opacity duration-300 whitespace-nowrap
-            ${isCollapsed ? "opacity-0 hidden" : "opacity-100"}
-          `}>
+                    px-5 text-[9px] font-black text-uecg-gray uppercase tracking-[0.2em] mb-3 transition-opacity duration-300 whitespace-nowrap
+                    ${isCollapsed ? "opacity-0 hidden" : "opacity-100"}
+                `}>
                     Menu Principal
                 </p>
 
-                <ul className="flex flex-col gap-1 w-full">
+                <ul className="flex flex-col gap-0.5 w-full">
                     {MENU_ITEMS.map((item) => {
                         const isActive = pathname.startsWith(item.href);
                         return (
@@ -76,21 +85,21 @@ export default function Sidebar() {
                                     href={item.href}
                                     title={isCollapsed ? item.name : ""}
                                     className={`
-                    flex items-center h-12 px-6 transition-all duration-200
-                    font-bold uppercase text-xs tracking-widest whitespace-nowrap overflow-hidden
-                    ${isActive
+                                        flex items-center h-10 px-5 transition-all duration-200
+                                        font-bold uppercase text-[10px] tracking-widest whitespace-nowrap overflow-hidden
+                                        ${isActive
                                         ? "bg-uecg-blue text-white"
-                                        : "text-uecg-blue hover:bg-uecg-blue hover:text-white"
+                                        : "text-uecg-gray hover:bg-blue-50 hover:text-uecg-blue"
                                     }
-                    ${isCollapsed ? "justify-center px-0" : "gap-4"}
-                  `}
+                                        ${isCollapsed ? "justify-center px-0" : "gap-3"}
+                                    `}
                                 >
-                                    <item.icon size={20} strokeWidth={2.5} className="min-w-[20px]" />
+                                    <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} className="min-w-[18px]" />
 
-                                    {/* Texto con transición de opacidad */}
+                                    {/* Texto con transición */}
                                     <span className={`transition-all duration-300 ${isCollapsed ? "opacity-0 w-0 translate-x-10" : "opacity-100 w-auto translate-x-0"}`}>
-                    {item.name}
-                  </span>
+                                        {item.name}
+                                    </span>
                                 </Link>
                             </li>
                         );
@@ -101,18 +110,19 @@ export default function Sidebar() {
             {/* FOOTER */}
             <div className="p-4 border-t border-uecg-line overflow-hidden">
                 <button
-                    onClick={() => logoutAction()}
+                    onClick={handleLogout}
+                    disabled={isPending}
                     className={`
-            w-full flex items-center h-10 border border-red-600 text-red-600 
-            hover:bg-red-600 hover:text-white transition-all font-bold uppercase text-xs tracking-widest whitespace-nowrap
-            ${isCollapsed ? "justify-center px-0" : "gap-4 px-4"}
-          `}
+                        w-full flex items-center h-10 border border-red-600 text-red-600 
+                        hover:bg-red-600 hover:text-white transition-all font-bold uppercase text-[10px] tracking-widest whitespace-nowrap disabled:opacity-50
+                        ${isCollapsed ? "justify-center px-0" : "gap-3 px-4"}
+                    `}
                     title="Cerrar Sesión"
                 >
                     <LogOut size={16} strokeWidth={2.5} className="min-w-[16px]" />
                     <span className={`transition-all duration-300 ${isCollapsed ? "opacity-0 w-0 hidden" : "opacity-100 w-auto"}`}>
-            Salir
-          </span>
+                        {isPending ? "Saliendo..." : "Salir"}
+                    </span>
                 </button>
             </div>
         </aside>

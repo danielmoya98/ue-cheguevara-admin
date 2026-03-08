@@ -5,19 +5,23 @@ import { Users, BookOpen, Clock, AlertTriangle, ArrowRight, UserPlus, CheckCircl
 import { getAnnouncementsAction } from "@/features/announcements/actions/announcement.action";
 import NoticeBoard from "@/features/announcements/components/notice-board";
 import CreateAnnouncementModal from "@/features/announcements/components/create-announcement-modal";
+// 1. IMPORTAMOS EL SERVICIO DE GESTIÓN ACADÉMICA
+import { academicYearService } from "@/features/academic/services/academic-year.service";
 
 // Forzamos que la página sea dinámica para que los datos siempre estén frescos
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage({ searchParams }: { searchParams: Promise<{ action?: string }> }) {
-    // 1. Capturamos el parámetro de la URL para saber si abrir el modal
+    // Capturamos el parámetro de la URL para saber si abrir el modal
     const { action } = await searchParams;
 
     const today = new Date();
     today.setHours(0, 0, 0, 0); // Medianoche de hoy
-    const currentYear = today.getFullYear();
 
-    // 2. Obtener Métricas Rápidas y Comunicados
+    // 2. OBTENEMOS LA GESTIÓN ACTIVA (La Máquina del Tiempo)
+    const activeYear = await academicYearService.getActiveYear();
+
+    // 3. Obtener Métricas Rápidas y Comunicados usando activeYear
     const [
         totalStudents,
         totalTeachers,
@@ -25,16 +29,16 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
         todayAttendances,
         announcementsRes
     ] = await Promise.all([
-        prisma.enrollment.count({ where: { academicYear: currentYear, status: "ACTIVE" } }),
+        prisma.enrollment.count({ where: { academicYear: activeYear, status: "ACTIVE" } }), // Filtrado por año
         prisma.user.count({ where: { role: "TEACHER", status: "ACTIVE" } }),
         prisma.classroom.count(),
-        prisma.attendance.findMany({ where: { date: today } }),
-        getAnnouncementsAction() // Obtenemos los comunicados
+        prisma.attendance.findMany({ where: { date: today } }), // La asistencia de "hoy" es literal hoy.
+        getAnnouncementsAction()
     ]);
 
     const announcements = announcementsRes.data || [];
 
-    // 3. Calcular estadísticas de asistencia de hoy
+    // Calcular estadísticas de asistencia de hoy
     const attendanceStats = {
         present: todayAttendances.filter(a => a.status === "PRESENT").length,
         absent: todayAttendances.filter(a => a.status === "ABSENT").length,
@@ -43,11 +47,15 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
     };
     const totalRecordedToday = todayAttendances.length;
 
-    // 4. Obtener "Alumnos en Riesgo" (Tienen al menos una nota menor a 51 en este año)
+    // 4. Obtener "Alumnos en Riesgo" filtrando por la gestión activa
     const failingMarks = await prisma.mark.findMany({
         where: {
             score: { lt: 51 },
-            evaluation: { date: { gte: new Date(`${currentYear}-01-01`) } }
+            evaluation: {
+                course: {
+                    academicYear: activeYear // Mejorado: Ahora busca exactamente en los cursos de este año
+                }
+            }
         },
         include: {
             student: { include: { user: true } },
@@ -60,7 +68,7 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
 
-            {/* AQUÍ INSERTAMOS EL MODAL INVISIBLE (Solo se abre si action === "new-notice") */}
+            {/* Modal para nuevos comunicados */}
             <CreateAnnouncementModal isOpen={action === "new-notice"} />
 
             {/* Header / Bienvenida */}
@@ -69,7 +77,7 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
                     Panel de Control
                 </h1>
                 <p className="text-uecg-gray font-bold text-sm uppercase tracking-widest mt-2">
-                    Resumen general de la institución • Gestión {currentYear}
+                    Resumen general de la institución • Gestión {activeYear}
                 </p>
             </div>
 
@@ -79,7 +87,7 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
                     <Users size={80} className="absolute -bottom-4 -right-4 opacity-10 group-hover:scale-110 transition-transform" />
                     <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Estudiantes Activos</h3>
                     <span className="block text-5xl font-black font-mono leading-none">{totalStudents}</span>
-                    <span className="text-xs font-bold text-gray-300 uppercase tracking-widest mt-4 block">Matriculados este año</span>
+                    <span className="text-xs font-bold text-gray-300 uppercase tracking-widest mt-4 block">Matriculados en {activeYear}</span>
                 </div>
 
                 <div className="bg-uecg-blue text-white p-6 relative overflow-hidden group">
@@ -153,7 +161,7 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
                         </Link>
                     </section>
 
-                    {/* NUEVO: Tablón de Comunicados */}
+                    {/* Tablón de Comunicados */}
                     <NoticeBoard announcements={announcements} />
 
                 </div>
@@ -169,7 +177,7 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
                         <div className="p-0">
                             {failingMarks.length === 0 ? (
                                 <div className="p-6 text-center">
-                                    <span className="text-xs font-bold text-gray-500 uppercase">Sin alertas recientes.</span>
+                                    <span className="text-xs font-bold text-gray-500 uppercase">Sin alertas en {activeYear}.</span>
                                 </div>
                             ) : (
                                 <ul className="divide-y divide-red-100">

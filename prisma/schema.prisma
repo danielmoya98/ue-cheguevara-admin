@@ -213,8 +213,8 @@ model StudentProfile {
 model Enrollment {
   id String @id @default(uuid())
 
-  academicYear Int    @default(2024)
-  status       String @default("ACTIVE") // ACTIVE, WITHDRAWN, TRANSFERRED
+  academicYear Int              @default(2024)
+  status       EnrollmentStatus @default(ACTIVE) // <-- Cambiado a Enum
 
   // Relaciones
   studentId String
@@ -360,4 +360,12 @@ model NotificationRead {
   // Un usuario solo puede tener un registro de lectura por comunicado
   @@unique([userId, announcementId])
   @@map("notification_reads")
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  WITHDRAWN // Retirado
+  TRANSFERRED // Transferido
+  PROMOTED // Aprobó y pasó de año
+  RETAINED // Reprobó y repite año
 }

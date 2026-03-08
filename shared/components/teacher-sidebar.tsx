@@ -4,6 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, BookOpen, CheckCircle, Users, LogOut, Menu } from "lucide-react";
 import { useSidebar } from "@/shared/context/sidebar-context";
+// IMPORTAMOS LA ACCIÓN DE LOGOUT
+import { logoutAction } from "@/features/auth/actions/logout.action";
+import { useTransition } from "react";
 
 const NAV_ITEMS = [
     { name: "Inicio", href: "/teacher/dashboard", icon: LayoutDashboard },
@@ -15,6 +18,14 @@ const NAV_ITEMS = [
 export default function TeacherSidebar() {
     const pathname = usePathname();
     const { isCollapsed, toggleSidebar } = useSidebar();
+    const [isPending, startTransition] = useTransition();
+
+    // Función manejadora para el botón de salir
+    const handleLogout = () => {
+        startTransition(() => {
+            logoutAction();
+        });
+    };
 
     return (
         <aside
@@ -73,18 +84,23 @@ export default function TeacherSidebar() {
                 })}
             </nav>
 
-            {/* Cerrar Sesión */}
+            {/* Cerrar Sesión (Ahora usa un botón con la acción real) */}
             <div className="p-4 border-t border-gray-800">
-                <Link
-                    href="/"
+                <button
+                    onClick={handleLogout}
+                    disabled={isPending}
                     className={`
-                        flex items-center gap-4 px-4 py-3 text-red-500 hover:bg-red-500/10 transition-colors font-bold
+                        w-full flex items-center gap-4 px-4 py-3 text-red-500 hover:bg-red-500/10 transition-colors font-bold disabled:opacity-50 cursor-pointer
                         ${isCollapsed ? "justify-center" : "justify-start"}
                     `}
                 >
                     <LogOut size={20} strokeWidth={2.5} />
-                    {!isCollapsed && <span className="text-xs uppercase tracking-widest">Cerrar Sesión</span>}
-                </Link>
+                    {!isCollapsed && (
+                        <span className="text-xs uppercase tracking-widest">
+                            {isPending ? "Saliendo..." : "Cerrar Sesión"}
+                        </span>
+                    )}
+                </button>
             </div>
         </aside>
     );

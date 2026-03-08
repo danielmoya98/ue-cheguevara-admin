@@ -4,7 +4,7 @@ import { z } from "zod";
 import { enrollmentSchema, StudentProfileInput } from "../validations/student.schema";
 
 export const studentService = {
-    getStudents: async (query?: string, classroomId?: string) => {
+    getStudents: async (query?: string, activeYear?: number | undefined, classroomId?: string) => {
         return await studentRepository.findAll(query, classroomId);
     },
 

@@ -42,9 +42,10 @@ export async function removeCourseAction(id: string, classroomId: string) {
     }
 }
 
-export async function getTeacherCoursesAction(teacherId?: string) {
+export async function getTeacherCoursesAction(teacherId?: string, activeYear?: number) {
     try {
-        const courses = await courseService.getTeacherCourses(teacherId);
+        // Ahora pasamos también el activeYear al servicio de base de datos
+        const courses = await courseService.getTeacherCourses(teacherId, activeYear);
         return { success: true, data: courses };
     } catch (error) {
         return { success: false, error: "Error al cargar las materias del docente" };

@@ -2,9 +2,20 @@
 
 import { Printer } from "lucide-react";
 
-interface BulletinData {
-    student: { user: { name: string; ci: string } };
-    classroom: { name: string; grade: { name: string; level: string } };
+export interface BulletinData {
+    student: {
+        documentId: string; // <-- Aquí está el CI en tu base de datos
+        user: {
+            name: string;
+        };
+    };
+    classroom: {
+        name: string;
+        grade: {
+            name: string;
+            level: string;
+        };
+    };
     academicYear: number;
     grades: {
         subjectName: string;
@@ -59,7 +70,7 @@ export default function BulletinPrintable({ data }: { data: BulletinData }) {
                     <div>
                         <span className="block text-[10px] font-black uppercase tracking-widest text-uecg-gray mb-1">Estudiante</span>
                         <span className="block text-lg font-black text-uecg-black uppercase">{data.student.user.name}</span>
-                        <span className="block text-xs font-bold text-gray-500 uppercase mt-1">CI: {data.student.user.ci}</span>
+                        <span className="block text-xs font-bold text-gray-500 uppercase mt-1">CI: {data.student.documentId}</span>
                     </div>
                     <div>
                         <span className="block text-[10px] font-black uppercase tracking-widest text-uecg-gray mb-1">Curso y Nivel</span>
