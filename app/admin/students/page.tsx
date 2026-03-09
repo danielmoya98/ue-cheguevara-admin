@@ -2,10 +2,11 @@ import { getStudentsAction } from "@/features/students/actions/student.action";
 import { getGradesAction } from "@/features/academic/actions/grade.action";
 import StudentTable from "@/features/students/components/student-table";
 import EnrollmentModal from "@/features/students/components/enrollment-modal";
-import { UserPlus, Search, Filter, CalendarDays } from "lucide-react";
+import { UserPlus, CalendarDays } from "lucide-react";
 import Link from "next/link";
-// 1. IMPORTAMOS EL SERVICIO DE GESTIÓN ACADÉMICA
 import { academicYearService } from "@/features/academic/services/academic-year.service";
+// 1. IMPORTAMOS EL NUEVO BUSCADOR EN TIEMPO REAL
+import StudentSearch from "@/features/students/components/student-search";
 
 interface PageProps {
     searchParams: Promise<{ [key: string]: string | undefined }>
@@ -15,29 +16,24 @@ export default async function StudentsPage({ searchParams }: PageProps) {
     const params = await searchParams;
     const query = params.q;
 
-    // 2. OBTENEMOS EL AÑO ACTIVO DE LA SESIÓN DEL USUARIO
     const activeYear = await academicYearService.getActiveYear();
 
-    // 3. PASAMOS EL AÑO A LA ACCIÓN (Tendrás que actualizar getStudentsAction para que reciba el año)
-    const { data: students, success: studentsSuccess } = await getStudentsAction(query, activeYear);
+    // Obtenemos los datos desde NestJS a través de las Server Actions
+    const [studentsRes, gradesRes] = await Promise.all([
+        getStudentsAction(query, activeYear),
+        getGradesAction()
+    ]);
 
-    // 4. Obtener Estructura Escolar
-    // (Dependiendo de tu lógica, los grados y paralelos también podrían depender del año)
-    const { data: grades, success: gradesSuccess } = await getGradesAction();
-
-    if (!studentsSuccess || !gradesSuccess) {
+    if (!studentsRes.success || !gradesRes.success) {
         return <div className="p-8 font-black text-red-500 uppercase tracking-widest text-xs">Error al cargar el directorio de estudiantes.</div>;
     }
 
-    // Filtramos solo los grados que tienen paralelos creados
-    const gradesWithClassrooms = (grades || []).filter(g => g.classrooms.length > 0);
+    const students = studentsRes.data || [];
+    const grades = gradesRes.data || [];
+    const gradesWithClassrooms = grades.filter((g: any) => g.classrooms.length > 0);
 
     return (
         <div className="space-y-6 relative animate-in fade-in duration-500">
-
-            {/* Modal de Matrícula Controlado por URL
-                NOTA: Le pasamos el activeYear para que al matricular, guarde ese año exacto en la BD
-            */}
             <EnrollmentModal classrooms={gradesWithClassrooms} activeYear={activeYear} />
 
             {/* Header con Estilo Suizo */}
@@ -60,27 +56,16 @@ export default async function StudentsPage({ searchParams }: PageProps) {
                 </Link>
             </div>
 
-            {/* Toolbar Simple (Buscador) */}
+            {/* Toolbar Simple (Buscador Integrado) */}
             <div className="flex flex-col md:flex-row gap-4 bg-white p-2 border-2 border-uecg-line shadow-sm">
-                <form className="flex-1 relative" action="/admin/students">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-uecg-gray">
-                        <Search size={16} strokeWidth={3} />
-                    </div>
-                    <input
-                        name="q"
-                        defaultValue={query || ""}
-                        placeholder="BUSCAR POR NOMBRE O CARNET..."
-                        className="w-full pl-12 pr-4 py-3 border-none bg-transparent font-bold text-uecg-black text-xs uppercase placeholder:text-gray-400 focus:outline-none transition-colors"
-                    />
-                    <button type="submit" className="hidden">Buscar</button>
-                </form>
+                {/* 2. REEMPLAZAMOS EL FORMULARIO POR EL COMPONENTE CLIENTE */}
+                <StudentSearch initialQuery={query || ""} />
             </div>
 
             {/* Tabla de Estudiantes */}
             <div className="bg-white border-2 border-uecg-line shadow-sm overflow-hidden">
-                <StudentTable students={students || []} />
+                <StudentTable students={students} />
             </div>
-
         </div>
     );
 }

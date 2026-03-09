@@ -10,7 +10,7 @@ interface RosterStudent {
     documentId: string;
     name: string;
     score: number | null; // null si aún no tiene nota
-    feedback: string;
+    feedback?: string; // Opcional, puede venir undefined de la API
 }
 
 interface MarkingSheetProps {
@@ -78,7 +78,7 @@ export default function MarkingSheet({ evaluationId, maxScore, initialRoster }: 
                     marks: roster.filter(s => s.score !== null).map(s => ({
                         studentId: s.studentId,
                         score: s.score,
-                        feedback: s.feedback
+                        feedback: s.feedback || ""
                     }))
                 })}
             />
@@ -140,7 +140,8 @@ export default function MarkingSheet({ evaluationId, maxScore, initialRoster }: 
                                         min="0"
                                         max={maxScore}
                                         placeholder="--"
-                                        value={student.score === null ? "" : student.score}
+                                        /* SOLUCIÓN: Usamos ?? "" para garantizar que no sea null/undefined */
+                                        value={student.score ?? ""}
                                         onChange={(e) => handleScoreChange(student.studentId, e.target.value)}
                                         className={`
                                                 w-full text-center text-lg font-black bg-transparent outline-none transition-colors py-2 border-b-2
@@ -153,7 +154,8 @@ export default function MarkingSheet({ evaluationId, maxScore, initialRoster }: 
                                     <input
                                         type="text"
                                         placeholder="Opcional..."
-                                        value={student.feedback}
+                                        /* SOLUCIÓN: Usamos || "" para asegurar que siempre sea un string */
+                                        value={student.feedback || ""}
                                         onChange={(e) => handleFeedbackChange(student.studentId, e.target.value)}
                                         className="w-full border-b-2 border-transparent hover:border-gray-300 bg-transparent p-2 text-xs font-bold text-uecg-black uppercase placeholder:text-gray-400 focus:border-uecg-blue outline-none transition-colors"
                                     />

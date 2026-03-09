@@ -1,52 +1,42 @@
-import { prisma } from "@/lib/db";
-import { cookies } from "next/headers";
 import { CheckCircle, CalendarDays, Users, AlertTriangle, Info } from "lucide-react";
 import AttendanceSheet from "@/features/attendance/components/attendance-sheet";
-// 1. IMPORTAMOS LOS SERVICIOS
 import { academicYearService } from "@/features/academic/services/academic-year.service";
-import { attendanceService } from "@/features/attendance/services/attendance.service";
+import { apiFetch } from "../../../app/lib/api-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function TeacherAttendancePage(props: { searchParams: Promise<{ date?: string, classroomId?: string }> }) {
     const searchParams = await props.searchParams;
-    const selectedDateStr = searchParams?.date || new Date().toLocaleDateString('en-CA'); // 'en-CA' da formato YYYY-MM-DD local
+    const selectedDateStr = searchParams?.date || new Date().toLocaleDateString('en-CA');
     const selectedClassroomId = searchParams?.classroomId;
 
-    const userId = (await cookies()).get("uecg_session")?.value || "";
-
-    // 2. OBTENEMOS LA GESTIÓN ACTIVA (Máquina del tiempo)
+    // 1. Obtenemos la gestión activa
     const activeYear = await academicYearService.getActiveYear();
 
-    // 3. Obtenemos solo las aulas donde el profesor dicta clases EN ESTA GESTIÓN
-    const teacherCourses = await prisma.course.findMany({
-        where: { teacherId: userId, academicYear: activeYear },
-        select: { classroomId: true }
-    });
+    // 2. Obtenemos las aulas permitidas para ESTE profesor desde la API
+    let allowedClassrooms: any[] = [];
+    try {
+        allowedClassrooms = await apiFetch<any[]>(`/classrooms/teacher/me?academicYear=${activeYear}`);
+    } catch (error) {
+        console.error("Error cargando las aulas del profesor", error);
+    }
 
-    // Extraer IDs únicos de las aulas permitidas
-    const allowedClassroomIds = [...new Set(teacherCourses.map(c => c.classroomId))];
+    const allowedClassroomIds = allowedClassrooms.map(c => c.id);
 
-    // Obtener los datos completos de esas aulas
-    const allowedClassrooms = await prisma.classroom.findMany({
-        where: { id: { in: allowedClassroomIds } },
-        include: { grade: true },
-        orderBy: [
-            { grade: { level: 'asc' } },
-            { grade: { numericOrder: 'asc' } }
-        ]
-    });
-
-    // 4. Obtener la planilla (roster) usando el SERVICIO CENTRALIZADO
+    // 3. Obtener la planilla (roster) usando el endpoint de NestJS
     let roster: any[] = [];
     let selectedClassroomData = null;
 
-    // Verificamos que el ID seleccionado esté en su lista permitida (Seguridad)
+    // Verificamos que el ID seleccionado esté en su lista permitida (Seguridad Frontend)
     if (selectedClassroomId && allowedClassroomIds.includes(selectedClassroomId)) {
         selectedClassroomData = allowedClassrooms.find(c => c.id === selectedClassroomId);
 
-        // ¡LA MAGIA! Reutilizamos el servicio que reparamos hace un momento, pasándole el año activo
-        roster = await attendanceService.getAttendanceRoster(selectedClassroomId, selectedDateStr, activeYear);
+        try {
+            // Reutilizamos el endpoint que ya tienes mapeado en NestJS
+            roster = await apiFetch<any[]>(`/attendance/roster?classroomId=${selectedClassroomId}&date=${selectedDateStr}&academicYear=${activeYear}`);
+        } catch (error) {
+            console.error("Error cargando la planilla de asistencia", error);
+        }
     }
 
     return (
@@ -80,7 +70,7 @@ export default async function TeacherAttendancePage(props: { searchParams: Promi
                         />
                     </div>
 
-                    {/* Selector de Aula (Filtrado por el Candado) */}
+                    {/* Selector de Aula (Filtrado por las aulas que le devuelve la API) */}
                     <div className="md:col-span-2 flex gap-4 items-end">
                         <div className="flex-1">
                             <label className="text-[10px] font-black uppercase tracking-[0.15em] text-uecg-gray mb-2 flex items-center gap-2">
@@ -96,7 +86,7 @@ export default async function TeacherAttendancePage(props: { searchParams: Promi
                                     <option value="" disabled>-- Elija un aula asignada --</option>
                                     {allowedClassrooms.map(classroom => (
                                         <option key={classroom.id} value={classroom.id}>
-                                            {classroom.grade.name} "{classroom.name}" - Nivel {classroom.grade.level}
+                                            {classroom.grade?.name} "{classroom.name}" - Nivel {classroom.grade?.level}
                                         </option>
                                     ))}
                                 </select>
@@ -117,7 +107,7 @@ export default async function TeacherAttendancePage(props: { searchParams: Promi
             {/* Área de la Planilla */}
             {selectedClassroomId ? (
                 <>
-                    {/* Seguridad: Mensaje si alguien intenta modificar la URL con un aula que no le toca */}
+                    {/* Seguridad Frontend: Mensaje si altera la URL */}
                     {!selectedClassroomData ? (
                         <div className="bg-red-50 border-2 border-red-200 p-6 flex items-start gap-4 shadow-sm">
                             <AlertTriangle className="text-red-600 mt-1" size={24} strokeWidth={2.5} />
@@ -135,7 +125,7 @@ export default async function TeacherAttendancePage(props: { searchParams: Promi
                                 <div className="flex items-center gap-2 border-l-4 border-uecg-blue pl-3">
                                     <Info size={16} className="text-uecg-blue" strokeWidth={3} />
                                     <span className="text-xs font-black uppercase tracking-widest text-uecg-black">
-                                        Registrando: {selectedClassroomData.grade.name} "{selectedClassroomData.name}"
+                                        Registrando: {selectedClassroomData.grade?.name} "{selectedClassroomData.name}"
                                     </span>
                                 </div>
                                 <span className="bg-uecg-black text-white px-4 py-2 text-[9px] font-black uppercase tracking-widest hidden md:block">

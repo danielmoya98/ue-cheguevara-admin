@@ -1,41 +1,24 @@
-import { prisma } from "@/lib/db";
 import Link from "next/link";
 import { BookOpen, Users, CheckCircle, PenTool, CalendarDays } from "lucide-react";
-import { cookies } from "next/headers";
 import NoticeBoard from "@/features/announcements/components/notice-board";
 import { getAnnouncementsAction } from "@/features/announcements/actions/announcement.action";
-// 1. IMPORTAMOS EL SERVICIO DE LA MÁQUINA DEL TIEMPO
 import { academicYearService } from "@/features/academic/services/academic-year.service";
+// 1. IMPORTAMOS LA NUEVA ACCIÓN
+import { getTeacherSummaryAction } from "@/features/dashboard/actions/teacher-dashboard.action";
 
 export const dynamic = "force-dynamic";
 
 export default async function TeacherDashboardPage() {
-
-    const userId = (await cookies()).get("uecg_session")?.value || "";
-
     // 2. OBTENEMOS LA GESTIÓN ACTIVA DEL USUARIO
     const activeYear = await academicYearService.getActiveYear();
 
-    // 3. Obtenemos las materias filtradas estrictamente por el AÑO ACTIVO
-    const teacherCourses = await prisma.course.findMany({
-        where: { teacherId: userId, academicYear: activeYear }, // <--- LA MAGIA
-        include: { classroom: true }
-    });
+    // 3. Obtenemos las métricas del Docente desde NestJS en paralelo a los comunicados
+    const [summaryRes, announcementsRes] = await Promise.all([
+        getTeacherSummaryAction(activeYear),
+        getAnnouncementsAction("TEACHER")
+    ]);
 
-    const totalCourses = teacherCourses.length;
-
-    // 4. Contar cuántos estudiantes únicos tiene a su cargo EN ESE AÑO
-    const classroomIds = teacherCourses.map(c => c.classroomId);
-    const uniqueStudentsCount = await prisma.enrollment.count({
-        where: {
-            classroomId: { in: classroomIds },
-            academicYear: activeYear, // <--- LA MAGIA APLICADA AQUÍ TAMBIÉN
-            status: "ACTIVE"
-        }
-    });
-
-    // 5. Obtener comunicados PERO filtrados para el rol TEACHER
-    const announcementsRes = await getAnnouncementsAction("TEACHER");
+    const { totalCourses, totalStudents } = summaryRes.data;
     const announcements = announcementsRes.data || [];
 
     return (
@@ -63,7 +46,7 @@ export default async function TeacherDashboardPage() {
                 <div className="bg-white border-2 border-uecg-line p-6 relative overflow-hidden group hover:border-uecg-black transition-colors shadow-sm">
                     <Users size={80} className="absolute -bottom-4 -right-4 text-gray-100 group-hover:scale-110 transition-transform" />
                     <h3 className="text-[10px] font-black uppercase tracking-widest text-uecg-gray mb-2">Estudiantes a Cargo</h3>
-                    <span className="block text-5xl font-black font-mono leading-none text-uecg-black relative z-10">{uniqueStudentsCount}</span>
+                    <span className="block text-5xl font-black font-mono leading-none text-uecg-black relative z-10">{totalStudents}</span>
                     <span className="text-[10px] font-bold text-uecg-gray uppercase tracking-widest mt-4 block relative z-10">Alumnos inscritos en sus clases</span>
                 </div>
             </div>
@@ -84,7 +67,7 @@ export default async function TeacherDashboardPage() {
                         <CheckCircle size={24} strokeWidth={2.5} className="text-gray-400 group-hover:text-white" />
                     </Link>
 
-                    <Link href="/teacher/courses" className="bg-white text-uecg-black p-6 flex items-center justify-between group hover:border-uecg-black transition-colors border-2 border-uecg-line shadow-sm">
+                    <Link href="/teacher/grades" className="bg-white text-uecg-black p-6 flex items-center justify-between group hover:border-uecg-black transition-colors border-2 border-uecg-line shadow-sm">
                         <div>
                             <span className="block text-sm font-black uppercase tracking-widest mb-1.5">Calificar</span>
                             <span className="text-[9px] text-uecg-gray font-bold uppercase tracking-widest">Ingresar notas a la planilla</span>
@@ -93,7 +76,7 @@ export default async function TeacherDashboardPage() {
                     </Link>
                 </div>
 
-                {/* Columna Derecha: El Tablón de Comunicados (REUTILIZADO) */}
+                {/* Columna Derecha: El Tablón de Comunicados */}
                 <div className="lg:col-span-2">
                     <NoticeBoard announcements={announcements} />
                 </div>

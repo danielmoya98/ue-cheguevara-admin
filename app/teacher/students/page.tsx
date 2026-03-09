@@ -1,8 +1,6 @@
-import { prisma } from "@/lib/db";
-import { cookies } from "next/headers";
-import { Users, Search, Phone, HeartPulse, ShieldAlert, CalendarDays } from "lucide-react";
-// 1. IMPORTAMOS EL SERVICIO DE LA MÁQUINA DEL TIEMPO
+import { Users, Search, Phone, HeartPulse, ShieldAlert, CalendarDays, AlertTriangle } from "lucide-react";
 import { academicYearService } from "@/features/academic/services/academic-year.service";
+import { apiFetch } from "@/app/lib/api-client";
 
 export const dynamic = "force-dynamic";
 
@@ -10,53 +8,34 @@ export default async function TeacherStudentsPage(props: { searchParams: Promise
     const searchParams = await props.searchParams;
     const query = searchParams?.query || "";
 
-    // 2. Identificar al Profesor logueado
-    const userId = (await cookies()).get("uecg_session")?.value || "";
-
-    // 3. OBTENER LA GESTIÓN ACTIVA
+    // 1. OBTENER LA GESTIÓN ACTIVA (Máquina del tiempo)
     const activeYear = await academicYearService.getActiveYear();
 
-    // 4. Obtener las aulas donde dicta clases este profesor EN ESE AÑO
-    const teacherCourses = await prisma.course.findMany({
-        where: { teacherId: userId, academicYear: activeYear },
-        select: { classroomId: true, classroom: { include: { grade: true } } }
-    });
+    // 2. Obtener los estudiantes desde la API de NestJS
+    let enrollments: any[] = [];
+    let errorMessage = "";
 
-    const allowedClassroomIds = [...new Set(teacherCourses.map(c => c.classroomId))];
+    try {
+        // Pasamos el query param codificado por si buscan con espacios (ej: "Juan Perez")
+        const url = `/enrollments/teacher/me?academicYear=${activeYear}${query ? `&query=${encodeURIComponent(query)}` : ''}`;
+        enrollments = await apiFetch<any[]>(url);
+    } catch (error: any) {
+        errorMessage = error.message;
+        console.error("Error al cargar estudiantes del profesor:", error);
+    }
 
-    // 5. Obtener a los estudiantes matriculados en esas aulas
-    const enrollments = await prisma.enrollment.findMany({
-        where: {
-            classroomId: { in: allowedClassroomIds },
-            academicYear: activeYear, // <--- MAGIA: Filtramos por la gestión activa
-            status: "ACTIVE",
-            // Corrección de esquema: Buscamos por nombre (User) o por documentId (StudentProfile)
-            student: query ? {
-                OR: [
-                    { user: { name: { contains: query, mode: "insensitive" } } },
-                    { documentId: { contains: query, mode: "insensitive" } }
-                ]
-            } : undefined
-        },
-        include: {
-            student: { include: { user: true } },
-            classroom: { include: { grade: true } }
-        },
-        orderBy: [
-            { classroom: { grade: { level: 'asc' } } },
-            { student: { user: { name: 'asc' } } }
-        ]
-    });
-
-    // Agrupamos a los estudiantes por Aula para que la vista sea más ordenada
+    // 3. Agrupamos a los estudiantes por Aula en el frontend (es súper rápido)
     const studentsByClassroom = enrollments.reduce((acc, enrollment) => {
-        const classroomName = `${enrollment.classroom.grade.name} "${enrollment.classroom.name}"`;
+        // Validamos que existan las relaciones para evitar crasheos si la API falla parcialmente
+        if (!enrollment.classroom || !enrollment.student) return acc;
+
+        const classroomName = `${enrollment.classroom.grade?.name} "${enrollment.classroom.name}"`;
         if (!acc[classroomName]) {
             acc[classroomName] = [];
         }
         acc[classroomName].push(enrollment.student);
         return acc;
-    }, {} as Record<string, typeof enrollments[0]['student'][]>);
+    }, {} as Record<string, any[]>);
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500 relative">
@@ -86,98 +65,113 @@ export default async function TeacherStudentsPage(props: { searchParams: Promise
                 </form>
             </div>
 
-            {/* Listado Agrupado por Aulas */}
-            <div className="space-y-12">
-                {Object.keys(studentsByClassroom).length === 0 ? (
-                    <div className="p-16 text-center border-4 border-dashed border-gray-200 bg-gray-50">
-                        <span className="font-black text-uecg-gray uppercase tracking-widest text-lg block mb-2">Sin Resultados</span>
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                            {query ? `No se encontró a ningún estudiante en la gestión ${activeYear}.` : `Aún no tiene estudiantes matriculados en sus materias para ${activeYear}.`}
-                        </span>
+            {/* Manejo de Error de API */}
+            {errorMessage && (
+                <div className="bg-red-50 border-2 border-red-200 p-6 flex items-start gap-4 shadow-sm">
+                    <AlertTriangle className="text-red-600 mt-1" size={24} strokeWidth={2.5} />
+                    <div>
+                        <h3 className="text-sm font-black uppercase tracking-widest text-red-700 mb-1">Error de Conexión</h3>
+                        <p className="text-[10px] font-bold text-red-600/80 uppercase tracking-widest">
+                            {errorMessage}. Asegúrese de haber creado el endpoint GET /api/v1/students/teacher/me.
+                        </p>
                     </div>
-                ) : (
-                    Object.entries(studentsByClassroom).map(([classroomName, students]) => (
-                        <div key={classroomName} className="space-y-4">
+                </div>
+            )}
 
-                            {/* Título del Aula (Cinta Negra) */}
-                            <div className="bg-uecg-black text-white px-4 py-2 inline-flex items-center gap-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.1)]">
-                                <h2 className="text-[10px] font-black uppercase tracking-[0.2em]">
-                                    {classroomName}
-                                </h2>
-                                <span className="bg-white/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest rounded-sm">
-                                    {students.length} Alumnos
-                                </span>
-                            </div>
+            {/* Listado Agrupado por Aulas */}
+            {!errorMessage && (
+                <div className="space-y-12">
+                    {Object.keys(studentsByClassroom).length === 0 ? (
+                        <div className="p-16 text-center border-4 border-dashed border-gray-200 bg-gray-50">
+                            <span className="font-black text-uecg-gray uppercase tracking-widest text-lg block mb-2">Sin Resultados</span>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                {query ? `No se encontró a ningún estudiante en la gestión ${activeYear}.` : `Aún no tiene estudiantes matriculados en sus materias para ${activeYear}.`}
+                            </span>
+                        </div>
+                    ) : (
+                        Object.entries(studentsByClassroom).map(([classroomName, students]) => (
+                            <div key={classroomName} className="space-y-4">
 
-                            {/* Grid de Tarjetas (Carnets de Estudiantes) */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                                {students.map(student => {
-                                    // Verificamos si tiene alertas médicas usando los campos correctos del schema
-                                    const hasMedicalAlert = !!(student.allergies || student.medicalNotes);
+                                {/* Título del Aula (Cinta Negra) */}
+                                <div className="bg-uecg-black text-white px-4 py-2 inline-flex items-center gap-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.1)]">
+                                    <h2 className="text-[10px] font-black uppercase tracking-[0.2em]">
+                                        {classroomName}
+                                    </h2>
+                                    <span className="bg-white/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest rounded-sm">
+                                        {students.length} Alumnos
+                                    </span>
+                                </div>
 
-                                    return (
-                                        <div
-                                            key={student.id}
-                                            className="bg-white border-2 border-uecg-line p-5 hover:border-uecg-blue hover:shadow-sm transition-all relative flex flex-col justify-between"
-                                        >
-                                            {/* Alerta Médica (Si tiene alergias/condiciones) */}
-                                            {hasMedicalAlert && (
-                                                <div className="absolute top-0 right-0 bg-red-50 text-red-600 p-2 border-l-2 border-b-2 border-red-200" title="Alerta Médica Activa">
-                                                    <ShieldAlert size={16} strokeWidth={2.5} />
-                                                </div>
-                                            )}
+                                {/* Grid de Tarjetas (Carnets de Estudiantes) */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                                    {students.map(student => {
+                                        // Verificamos si tiene alertas médicas usando los campos correctos del schema
+                                        const hasMedicalAlert = !!(student.allergies || student.medicalNotes);
 
-                                            <div>
-                                                {/* Datos del Estudiante */}
-                                                <div className="flex items-center gap-4 mb-5 mt-1">
-                                                    <div className="w-12 h-12 bg-gray-50 text-uecg-black flex items-center justify-center font-black text-sm border-2 border-uecg-line">
-                                                        {student.user.name.substring(0, 2).toUpperCase()}
+                                        return (
+                                            <div
+                                                key={student.id}
+                                                className="bg-white border-2 border-uecg-line p-5 hover:border-uecg-blue hover:shadow-sm transition-all relative flex flex-col justify-between"
+                                            >
+                                                {/* Alerta Médica (Si tiene alergias/condiciones) */}
+                                                {hasMedicalAlert && (
+                                                    <div className="absolute top-0 right-0 bg-red-50 text-red-600 p-2 border-l-2 border-b-2 border-red-200" title="Alerta Médica Activa">
+                                                        <ShieldAlert size={16} strokeWidth={2.5} />
                                                     </div>
-                                                    <div>
-                                                        <h3 className="text-sm font-black uppercase tracking-tight text-uecg-black leading-none mb-1.5 line-clamp-1">
-                                                            {student.user.name}
-                                                        </h3>
-                                                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block bg-gray-100 px-1.5 py-0.5 inline-block">
-                                                            CI: {student.documentId}
-                                                        </span>
-                                                    </div>
-                                                </div>
+                                                )}
 
-                                                {/* Datos de Emergencia (Info Block) */}
-                                                <div className="space-y-3 bg-gray-50/50 p-4 border-t-2 border-uecg-line">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="bg-blue-100 p-1.5">
-                                                            <Phone size={12} strokeWidth={3} className="text-uecg-blue" />
+                                                <div>
+                                                    {/* Datos del Estudiante */}
+                                                    <div className="flex items-center gap-4 mb-5 mt-1">
+                                                        <div className="w-12 h-12 bg-gray-50 text-uecg-black flex items-center justify-center font-black text-sm border-2 border-uecg-line">
+                                                            {student.user?.name ? student.user.name.substring(0, 2).toUpperCase() : '??'}
                                                         </div>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-[9px] font-black uppercase tracking-widest text-uecg-gray">Tutor Responsable</span>
-                                                            <span className="text-[10px] font-bold text-uecg-black uppercase leading-tight mt-0.5">
-                                                                {student.guardianName} ({student.guardianPhone})
+                                                        <div>
+                                                            <h3 className="text-sm font-black uppercase tracking-tight text-uecg-black leading-none mb-1.5 line-clamp-1">
+                                                                {student.user?.name || 'Sin Nombre'}
+                                                            </h3>
+                                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block bg-gray-100 px-1.5 py-0.5 inline-block">
+                                                                CI: {student.documentId || 'S/N'}
                                                             </span>
                                                         </div>
                                                     </div>
 
-                                                    <div className="flex items-start gap-3">
-                                                        <div className={`p-1.5 ${hasMedicalAlert ? "bg-red-100" : "bg-gray-200"}`}>
-                                                            <HeartPulse size={12} strokeWidth={3} className={hasMedicalAlert ? "text-red-600" : "text-gray-400"} />
+                                                    {/* Datos de Emergencia (Info Block) */}
+                                                    <div className="space-y-3 bg-gray-50/50 p-4 border-t-2 border-uecg-line">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="bg-blue-100 p-1.5">
+                                                                <Phone size={12} strokeWidth={3} className="text-uecg-blue" />
+                                                            </div>
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[9px] font-black uppercase tracking-widest text-uecg-gray">Tutor Responsable</span>
+                                                                <span className="text-[10px] font-bold text-uecg-black uppercase leading-tight mt-0.5">
+                                                                    {student.guardianName || 'No registrado'} ({student.guardianPhone || 'S/T'})
+                                                                </span>
+                                                            </div>
                                                         </div>
-                                                        <div className="flex flex-col flex-1">
-                                                            <span className="text-[9px] font-black uppercase tracking-widest text-uecg-gray">Salud / Alergias</span>
-                                                            <span className={`text-[10px] font-bold uppercase leading-tight mt-0.5 line-clamp-2 ${hasMedicalAlert ? "text-red-600" : "text-gray-500"}`}>
-                                                                {student.allergies || student.medicalNotes || "Sin condiciones reportadas"}
-                                                            </span>
+
+                                                        <div className="flex items-start gap-3">
+                                                            <div className={`p-1.5 ${hasMedicalAlert ? "bg-red-100" : "bg-gray-200"}`}>
+                                                                <HeartPulse size={12} strokeWidth={3} className={hasMedicalAlert ? "text-red-600" : "text-gray-400"} />
+                                                            </div>
+                                                            <div className="flex flex-col flex-1">
+                                                                <span className="text-[9px] font-black uppercase tracking-widest text-uecg-gray">Salud / Alergias</span>
+                                                                <span className={`text-[10px] font-bold uppercase leading-tight mt-0.5 line-clamp-2 ${hasMedicalAlert ? "text-red-600" : "text-gray-500"}`}>
+                                                                    {student.allergies || student.medicalNotes || "Sin condiciones reportadas"}
+                                                                </span>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    );
-                                })}
+                                        );
+                                    })}
+                                </div>
                             </div>
-                        </div>
-                    ))
-                )}
-            </div>
+                        ))
+                    )}
+                </div>
+            )}
         </div>
     );
 }

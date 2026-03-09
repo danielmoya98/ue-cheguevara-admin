@@ -1,41 +1,60 @@
-import { gradeService } from "@/features/grades/services/grade.service";
 import Link from "next/link";
-import { ChevronLeft, FileSpreadsheet, Calendar, User } from "lucide-react";
+import { ChevronLeft, FileSpreadsheet, Calendar, User, AlertCircle } from "lucide-react";
 import MarkingSheet from "@/features/grades/components/marking-sheet";
+import { apiFetch } from "../../../../lib/api-client";
 
 export default async function EvaluatePage({ params }: { params: Promise<{ id: string }> }) {
     const { id: evaluationId } = await params;
 
-    // Obtener la evaluación y la lista de alumnos mezclada con sus notas
-    let data;
+    let data: any = null;
+    let errorMessage = "";
+
     try {
-        data = await gradeService.getMarkingRoster(evaluationId);
-    } catch (error) {
+        // Llamamos al endpoint mágico de NestJS que nos da la evaluación y los alumnos
+        data = await apiFetch<any>(`/grades/evaluations/${evaluationId}/roster`);
+    } catch (error: any) {
+        // En lugar de ocultar el error, lo guardamos para mostrarlo
+        errorMessage = error.message || "Fallo desconocido al obtener la planilla de evaluación";
+    }
+
+    // SI HAY UN ERROR, MOSTRAMOS LA PANTALLA ROJA DE DEPURACIÓN
+    if (errorMessage || !data) {
         return (
-            <div className="p-12 text-center border-2 border-dashed border-red-300 bg-red-50">
-                <span className="font-black uppercase tracking-widest text-sm text-red-600 block">Evaluación No Encontrada</span>
-                <Link href="/admin/academic" className="mt-4 inline-block text-xs font-bold text-uecg-blue hover:underline">
-                    Volver al Inicio
+            <div className="p-8 border-4 border-red-500 bg-red-50 space-y-6">
+                <div className="flex items-center gap-2 text-red-600 font-black uppercase text-2xl tracking-tighter">
+                    <AlertCircle size={32} strokeWidth={3} />
+                    Error Cargando Planilla (NestJS)
+                </div>
+
+                <div className="bg-white p-4 border-l-4 border-red-500">
+                    <h3 className="font-black text-uecg-black uppercase text-sm mb-1">El frontend intentó llamar a:</h3>
+                    <code className="text-red-600 bg-red-50 px-2 py-1 text-xs font-bold block mb-2">GET /api/v1/grades/evaluations/{evaluationId}/roster</code>
+                    <p className="text-xs text-uecg-gray font-mono mt-4 border-t-2 border-dashed border-red-200 pt-4">Mensaje del Backend:</p>
+                    <p className="text-sm font-black text-red-700 uppercase">{errorMessage}</p>
+                </div>
+
+                <Link href="/admin/grades" className="mt-4 inline-block text-xs font-black uppercase text-uecg-black border-2 border-uecg-black px-4 py-2 hover:bg-uecg-black hover:text-white transition-colors">
+                    Volver a Mis Materias
                 </Link>
             </div>
         );
     }
 
+    // SI NO HAY ERROR, PINTAMOS LA PLANILLA NORMALMENTE
     const { evaluation, roster } = data;
     const course = evaluation.course;
+    const evalDate = new Date(evaluation.date);
 
     return (
         <div className="space-y-6 relative">
 
-            {/* Header de la Evaluación */}
             <div className="border-b-4 border-uecg-black pb-6">
                 <Link
-                    // Asumimos que más adelante tendremos un dashboard para cada curso
-                    href={`/admin/academic/classrooms/${course.classroomId}`}
+                    href={`/admin/grades/course/${course.id}`}
                     className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-uecg-gray hover:text-uecg-blue mb-4 transition-colors"
                 >
                     <ChevronLeft size={14} strokeWidth={3} />
-                    Volver al Curso
+                    Volver al Cuaderno
                 </Link>
 
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
@@ -51,7 +70,7 @@ export default async function EvaluatePage({ params }: { params: Promise<{ id: s
                                 {evaluation.title}
                             </h1>
                             <div className="flex items-center gap-4 text-xs font-bold uppercase tracking-widest text-uecg-gray mt-3">
-                                <span className="flex items-center gap-1"><Calendar size={12}/> {evaluation.date.toLocaleDateString('es-BO')}</span>
+                                <span className="flex items-center gap-1"><Calendar size={12}/> {evalDate.toLocaleDateString('es-BO')}</span>
                                 <span className="flex items-center gap-1"><User size={12}/> {course.subject.name} - {course.classroom.grade.name} "{course.classroom.name}"</span>
                             </div>
                         </div>
@@ -70,7 +89,7 @@ export default async function EvaluatePage({ params }: { params: Promise<{ id: s
                 )}
             </div>
 
-            {/* Planilla de Calificaciones (Componente Cliente) */}
+            {/* Planilla de Calificaciones */}
             <MarkingSheet
                 evaluationId={evaluationId}
                 maxScore={evaluation.maxScore}

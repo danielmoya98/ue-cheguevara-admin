@@ -1,9 +1,8 @@
-import { prisma } from "@/lib/db";
 import { FileText, Users, Search, AlertTriangle, CalendarDays } from "lucide-react";
-import { bulletinService } from "@/features/grades/services/bulletin.service";
 import BulletinPrintable from "@/features/grades/components/bulletin-printable";
-// 1. IMPORTAMOS EL SERVICIO DE LA MÁQUINA DEL TIEMPO
 import { academicYearService } from "@/features/academic/services/academic-year.service";
+import { getStudentsForBulletinAction, getStudentBulletinAction } from "@/features/grades/actions/bulletin.action";
+import { apiFetch } from "../../lib/api-client";
 
 export const dynamic = "force-dynamic";
 
@@ -12,39 +11,38 @@ export default async function AdminBulletinsPage(props: { searchParams: Promise<
     const classroomId = params?.classroomId;
     const studentId = params?.studentId;
 
-    // 2. OBTENEMOS LA GESTIÓN ACTIVA DEL USUARIO
     const activeYear = await academicYearService.getActiveYear();
 
-    // 1. Obtener todas las aulas para el primer selector
-    const classrooms = await prisma.classroom.findMany({
-        include: { grade: true },
-        orderBy: [{ grade: { level: 'asc' } }, { grade: { numericOrder: 'asc' } }]
-    });
-
-    // 2. Si se seleccionó un aula, obtener a sus estudiantes activos en la GESTIÓN ACTUAL
-    let students: any[] = [];
-    if (classroomId) {
-        const enrollments = await prisma.enrollment.findMany({
-            where: {
-                classroomId,
-                academicYear: activeYear, // <--- MAGIA: Filtramos por el año seleccionado
-                status: "ACTIVE"
-            },
-            include: { student: { include: { user: true } } },
-            orderBy: { student: { user: { name: 'asc' } } }
-        });
-        students = enrollments.map(e => e.student);
+    // 1. Obtener todas las aulas (Aplastamos el endpoint overview para que sea una lista plana)
+    let classrooms: any[] = [];
+    try {
+        const gradesOverview = await apiFetch<any[]>("/grades/overview");
+        classrooms = gradesOverview.flatMap(grade =>
+            grade.classrooms.map((c: any) => ({ ...c, grade }))
+        );
+    } catch (error) {
+        console.error("Error al cargar aulas", error);
     }
 
-    // 3. Si se seleccionó un estudiante, usamos nuestro Servicio pasándole la Gestión Activa
+    // 2. Si se seleccionó un aula, buscar alumnos usando la Server Action
+    let students: any[] = [];
+    if (classroomId) {
+        const studentsRes = await getStudentsForBulletinAction(classroomId, activeYear);
+        if (studentsRes.success) {
+            students = studentsRes.data;
+        }
+    }
+
+    // 3. Si se seleccionó un estudiante, buscar su Libreta usando la Server Action
     let bulletinData = null;
     let bulletinError = null;
 
     if (studentId) {
-        try {
-            bulletinData = await bulletinService.getStudentBulletin(studentId, activeYear); // <--- AÑO PASADO AL SERVICIO
-        } catch (error: any) {
-            bulletinError = error.message;
+        const bulletinRes = await getStudentBulletinAction(studentId, activeYear);
+        if (bulletinRes.success) {
+            bulletinData = bulletinRes.data;
+        } else {
+            bulletinError = bulletinRes.message;
         }
     }
 
@@ -84,7 +82,7 @@ export default async function AdminBulletinsPage(props: { searchParams: Promise<
                         </div>
                     </div>
 
-                    {/* PASO 2: Seleccionar Estudiante (Solo aparece si hay un aula seleccionada en este año) */}
+                    {/* PASO 2: Seleccionar Estudiante */}
                     <div>
                         <label className={`${labelClass} ${!classroomId ? 'opacity-50' : ''}`}>2. Seleccionar Estudiante</label>
                         <div className="relative">
@@ -100,7 +98,7 @@ export default async function AdminBulletinsPage(props: { searchParams: Promise<
                                 </option>
                                 {students.map(s => (
                                     <option key={s.id} value={s.id}>
-                                        {s.user.name} (CI: {s.user.ci})
+                                        {s.user?.name} (CI: {s.documentId})
                                     </option>
                                 ))}
                             </select>
@@ -124,7 +122,7 @@ export default async function AdminBulletinsPage(props: { searchParams: Promise<
             <div className="mt-8 animate-in slide-in-from-bottom-4 duration-500">
                 {bulletinError ? (
                     // Mensaje de Error
-                    <div className="bg-red-50 border-2 border-red-200 p-6 flex items-start gap-4 shadow-sm">
+                    <div className="bg-red-50 border-2 border-red-200 p-6 flex items-start gap-4 shadow-sm print:hidden">
                         <AlertTriangle className="text-red-600 mt-1" size={24} strokeWidth={2.5} />
                         <div>
                             <h3 className="text-sm font-black uppercase tracking-widest text-red-700 mb-1">Error al generar</h3>

@@ -1,8 +1,8 @@
 import { getGradesAction } from "@/features/academic/actions/grade.action";
-import { attendanceService } from "@/features/attendance/services/attendance.service";
+// 1. IMPORTAMOS LA NUEVA ACCIÓN EN LUGAR DEL SERVICIO
+import { getAttendanceRosterAction } from "@/features/attendance/actions/attendance.action";
 import AttendanceSheet from "@/features/attendance/components/attendance-sheet";
 import { CalendarDays, Users } from "lucide-react";
-// 1. IMPORTAMOS EL SERVICIO DE LA MÁQUINA DEL TIEMPO
 import { academicYearService } from "@/features/academic/services/academic-year.service";
 
 interface PageProps {
@@ -12,28 +12,25 @@ interface PageProps {
 export default async function AttendancePage({ searchParams }: PageProps) {
     const params = await searchParams;
 
-    // 2. OBTENEMOS LA GESTIÓN ACTIVA DEL USUARIO
     const activeYear = await academicYearService.getActiveYear();
 
-    // 3. Obtener parámetros de búsqueda
-    const today = new Date().toLocaleDateString('en-CA'); // 'en-CA' da formato YYYY-MM-DD
+    const today = new Date().toLocaleDateString('en-CA'); // Formato YYYY-MM-DD local
     const dateParam = params.date || today;
     const classroomIdParam = params.classroomId;
 
-    // 4. Obtener la lista de aulas para el menú desplegable
-    const { data: grades, success } = await getGradesAction();
-    const gradesWithClassrooms = (grades || []).filter(g => g.classrooms.length > 0);
+    // Obtener la lista de aulas para el menú desplegable (Reutilizamos la acción existente de grados)
+    const { data: grades } = await getGradesAction();
+    const gradesWithClassrooms = (grades || []).filter((g: any) => g.classrooms.length > 0);
 
-    // 5. Si hay un aula seleccionada, buscar la planilla filtrada por el AÑO ACTIVO
     let roster: any[] = [];
     if (classroomIdParam) {
-        // AQUÍ ESTÁ LA MAGIA: Le pasamos activeYear al servicio
-        roster = await attendanceService.getAttendanceRoster(classroomIdParam, dateParam, activeYear);
+        // 2. OBTENEMOS LA PLANILLA A TRAVÉS DE LA ACCIÓN / API
+        const { data } = await getAttendanceRosterAction(classroomIdParam, dateParam, activeYear);
+        roster = data || [];
     }
 
     return (
         <div className="space-y-8 relative animate-in fade-in duration-500">
-
             {/* Header Estilo Suizo */}
             <div className="border-b-4 border-uecg-black pb-6">
                 <h1 className="text-3xl font-black text-uecg-black uppercase tracking-tighter leading-none mb-2">
@@ -47,7 +44,6 @@ export default async function AttendancePage({ searchParams }: PageProps) {
             {/* Barra de Filtros (Navegación por URL) */}
             <div className="bg-white p-6 border-2 border-uecg-line shadow-sm">
                 <form className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end" action="/admin/attendance">
-
                     {/* Filtro: Fecha */}
                     <div>
                         <label className="text-[10px] font-black uppercase tracking-[0.15em] text-uecg-gray mb-2 flex items-center gap-2">
@@ -76,7 +72,7 @@ export default async function AttendancePage({ searchParams }: PageProps) {
                                     className="w-full p-3 font-bold text-uecg-black bg-transparent outline-none appearance-none cursor-pointer z-10 relative text-xs uppercase"
                                 >
                                     <option value="" disabled>Seleccione un aula para tomar lista...</option>
-                                    {gradesWithClassrooms.map((grade) => (
+                                    {gradesWithClassrooms.map((grade: any) => (
                                         <optgroup key={grade.id} label={`${grade.name} de ${grade.level}`}>
                                             {grade.classrooms.map((classroom: any) => (
                                                 <option key={classroom.id} value={classroom.id}>

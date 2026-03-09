@@ -1,8 +1,7 @@
-import { prisma } from "@/lib/db";
 import { CreditCard, Users } from "lucide-react";
 import StudentIdCard from "@/features/students/components/student-id-card";
-// IMPORTAMOS EL NUEVO BOTÓN
 import PrintIdCardsButton from "@/features/students/components/print-id-cards-button";
+import { apiFetch } from "../../../lib/api-client";
 
 export const dynamic = "force-dynamic";
 
@@ -11,26 +10,28 @@ export default async function AdminIdCardsPage(props: { searchParams: Promise<{ 
     const classroomId = searchParams?.classroomId;
     const currentYear = new Date().getFullYear();
 
-    const classrooms = await prisma.classroom.findMany({
-        include: { grade: true },
-        orderBy: [{ grade: { level: 'asc' } }, { grade: { numericOrder: 'asc' } }]
-    });
-
+    let classrooms: any[] = [];
     let enrollments: any[] = [];
-    if (classroomId) {
-        enrollments = await prisma.enrollment.findMany({
-            where: { classroomId, academicYear: currentYear, status: "ACTIVE" },
-            include: {
-                student: { include: { user: true } },
-                classroom: { include: { grade: true } }
-            },
-            orderBy: { student: { user: { name: 'asc' } } }
-        });
+
+    try {
+        // Obtenemos los grados y paralelos para pintar el <select>
+        const gradesOverview = await apiFetch<any[]>("/grades/overview");
+
+        // Aplastamos los paralelos para que sea un solo array fácil de mapear
+        classrooms = gradesOverview.flatMap(grade =>
+            grade.classrooms.map((c: any) => ({ ...c, grade }))
+        );
+
+        // Si hay un aula seleccionada, buscamos a los alumnos matriculados ahí
+        if (classroomId) {
+            enrollments = await apiFetch<any[]>(`/enrollments?classroomId=${classroomId}&academicYear=${currentYear}`);
+        }
+    } catch (error) {
+        console.error("Error al cargar datos de carnetización", error);
     }
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500 relative">
-
             <div className="border-b-4 border-uecg-black pb-6 print:hidden">
                 <h1 className="text-3xl font-black text-uecg-black uppercase tracking-tighter leading-none mb-2">
                     Carnetización Digital
@@ -63,7 +64,6 @@ export default async function AdminIdCardsPage(props: { searchParams: Promise<{ 
                         Generar Carnets
                     </button>
 
-                    {/* USAMOS EL COMPONENTE CLIENTE AQUÍ */}
                     {enrollments.length > 0 && <PrintIdCardsButton />}
                 </form>
             </div>

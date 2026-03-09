@@ -1,14 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { gradeService } from "../services/grade.service";
 import { evaluationSchema, bulkMarksSchema } from "../validations/grade.schema";
-import { cookies } from "next/headers";
+import { apiFetch } from "@/app/lib/api-client";
 
 export async function createEvaluationAction(prevState: any, formData: FormData) {
-    const userId = (await cookies()).get("uecg_session")?.value;
-    if (!userId) return { success: false, message: "Sesión expirada." };
-
     const rawData = Object.fromEntries(formData.entries());
     const validated = evaluationSchema.safeParse(rawData);
 
@@ -17,11 +13,17 @@ export async function createEvaluationAction(prevState: any, formData: FormData)
     }
 
     try {
-        await gradeService.createEvaluation(validated.data, userId);
-        revalidatePath(`/admin/academic/courses/${validated.data.courseId}`); // Ruta futura
-        return { success: true, message: "Evaluación creada correctamente." };
+        // CORRECCIÓN CLAVE 1: Añadimos "/grades" al inicio de la ruta
+        const newEval = await apiFetch<any>("/grades/evaluations", {
+            method: "POST",
+            body: JSON.stringify(validated.data)
+        });
+
+        revalidatePath(`/admin/grades/course/${validated.data.courseId}`);
+        // Retornamos el ID para que el modal sepa a dónde redirigir
+        return { success: true, message: "Evaluación creada.", evaluationId: newEval.id };
     } catch (error: any) {
-        return { success: false, message: error.message || "Error al crear la evaluación." };
+        return { success: false, message: error.message || "Error al crear evaluación." };
     }
 }
 
@@ -31,14 +33,18 @@ export async function saveMarksAction(prevState: any, formData: FormData) {
         const validated = bulkMarksSchema.safeParse(rawData);
 
         if (!validated.success) {
-            return { success: false, message: "Notas inválidas. Verifique que sean números." };
+            return { success: false, message: "Datos inválidos en la planilla." };
         }
 
-        await gradeService.saveMarks(validated.data);
+        // CORRECCIÓN CLAVE 2: Añadimos "/grades" al inicio de la ruta
+        await apiFetch("/grades/marks/bulk", {
+            method: "POST",
+            body: JSON.stringify(validated.data)
+        });
 
         revalidatePath(`/admin/grades/evaluate/${validated.data.evaluationId}`);
-        return { success: true, message: "Planilla de notas guardada exitosamente." };
+        return { success: true, message: "Calificaciones guardadas exitosamente." };
     } catch (error: any) {
-        return { success: false, message: error.message || "Error al guardar notas." };
+        return { success: false, message: error.message || "Error de red al guardar notas." };
     }
 }

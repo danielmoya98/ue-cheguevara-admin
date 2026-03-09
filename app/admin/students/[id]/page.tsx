@@ -1,14 +1,15 @@
-import { studentService } from "@/features/students/services/student.service";
 import Link from "next/link";
 import { ChevronLeft, UserCircle, AlertTriangle, Phone, MapPin, Edit } from "lucide-react";
+import { apiFetch } from "../../../lib/api-client";
 
 export default async function StudentProfilePage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
+    let profile: any = null;
 
-    // Obtener los datos completos del estudiante
-    const profile = await studentService.getStudentById(id);
-
-    if (!profile) {
+    try {
+        // Consumimos el endpoint de NestJS para traer el perfil completo
+        profile = await apiFetch<any>(`/students/${id}`);
+    } catch (error) {
         return (
             <div className="p-12 text-center border-2 border-dashed border-red-300 bg-red-50">
                 <span className="font-black uppercase tracking-widest text-sm text-red-600 block">Expediente No Encontrado</span>
@@ -19,14 +20,15 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
         );
     }
 
-    // Calculamos la edad actual
-    const age = new Date().getFullYear() - profile.birthDate.getFullYear();
+    // CORRECCIÓN DE FECHAS: Convertimos el string ISO de NestJS a un objeto Date
+    const birthDate = new Date(profile.birthDate);
+    const age = new Date().getFullYear() - birthDate.getFullYear();
+
     // Identificamos la matrícula activa
-    const activeEnrollment = profile.enrollments.find(e => e.status === "ACTIVE" && e.academicYear === new Date().getFullYear());
+    const activeEnrollment = profile.enrollments.find((e: any) => e.status === "ACTIVE" && e.academicYear === new Date().getFullYear());
 
     return (
         <div className="space-y-8 relative max-w-5xl mx-auto animate-in fade-in duration-300">
-
             {/* Header del Expediente */}
             <div className="flex flex-col md:flex-row justify-between items-start border-b-4 border-uecg-black pb-6">
                 <div>
@@ -55,7 +57,6 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
                     </div>
                 </div>
 
-                {/* Estado Académico Actual (Arriba a la derecha) */}
                 <div className="mt-6 md:mt-0 text-right">
                     <span className="text-[10px] font-black uppercase tracking-widest text-uecg-gray block mb-1">Estado {new Date().getFullYear()}</span>
                     {activeEnrollment ? (
@@ -75,17 +76,14 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
                 </div>
             </div>
 
-            {/* Grid de Información (Ficha Kárdex) */}
+            {/* Grid de Información (Mismo código visual que tenías) */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
                 {/* Columna Izquierda: Datos Personales y Médicos */}
                 <div className="lg:col-span-2 space-y-8">
-
-                    {/* Sección: Datos Biográficos */}
+                    {/* ... (Todo tu JSX de la biografía, solo asegúrate de imprimir birthDate formateado) */}
                     <section className="bg-white border-2 border-uecg-line relative">
                         <div className="bg-uecg-black text-white px-4 py-2 flex justify-between items-center">
                             <h2 className="text-sm font-black uppercase tracking-widest">Datos Biográficos</h2>
-                            {/* Futuro: Link para editar */}
                             <button className="text-gray-300 hover:text-white transition-colors" title="Editar Perfil">
                                 <Edit size={14} strokeWidth={2.5} />
                             </button>
@@ -94,7 +92,7 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
                             <div>
                                 <label className="text-[10px] font-black uppercase tracking-widest text-uecg-gray block mb-1">Fecha de Nacimiento</label>
                                 <span className="text-sm font-bold uppercase text-uecg-black">
-                                    {profile.birthDate.toLocaleDateString('es-BO', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                    {birthDate.toLocaleDateString('es-BO', { day: '2-digit', month: 'long', year: 'numeric' })}
                                     <span className="text-uecg-blue ml-2">({age} años)</span>
                                 </span>
                             </div>
@@ -112,7 +110,7 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
                         </div>
                     </section>
 
-                    {/* Sección: Ficha Médica */}
+                    {/* Ficha Médica */}
                     <section className={`bg-white border-2 relative ${profile.allergies || profile.medicalNotes ? 'border-red-200' : 'border-uecg-line'}`}>
                         <div className={`${profile.allergies || profile.medicalNotes ? 'bg-red-50 text-red-600 border-b-2 border-red-200' : 'bg-gray-100 text-uecg-black border-b-2 border-uecg-line'} px-4 py-2 flex items-center gap-2`}>
                             {profile.allergies || profile.medicalNotes ? <AlertTriangle size={16} strokeWidth={2.5} /> : null}
@@ -139,12 +137,10 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
                             )}
                         </div>
                     </section>
-
                 </div>
 
                 {/* Columna Derecha: Tutor e Historial */}
                 <div className="space-y-8">
-
                     {/* Sección: Tutor / Emergencia */}
                     <section className="bg-uecg-blue text-white border-4 border-uecg-black relative">
                         <div className="px-4 py-3 border-b-2 border-blue-800 flex items-center gap-2 bg-black/20">
@@ -182,7 +178,7 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
                                 <p className="text-xs text-uecg-gray font-bold p-6 text-center italic">Sin registros académicos.</p>
                             ) : (
                                 <ul className="divide-y divide-uecg-line">
-                                    {profile.enrollments.map(enrollment => (
+                                    {profile.enrollments.map((enrollment: any) => (
                                         <li key={enrollment.id} className="p-4 hover:bg-gray-50 transition-colors flex justify-between items-center">
                                             <div>
                                                 <span className="block text-sm font-black uppercase text-uecg-black">
@@ -202,7 +198,6 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
                         </div>
                     </section>
                 </div>
-
             </div>
         </div>
     );

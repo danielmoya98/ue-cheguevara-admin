@@ -2,10 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { userSchema } from "../validations/user.schema";
-import { userService } from "../services/user.service";
+import { apiFetch } from "../../../app/lib/api-client";
 
 export async function createUserAction(prevState: any, formData: FormData) {
-    // 1. Extraer y Validar datos
     const rawData = Object.fromEntries(formData.entries());
     const validated = userSchema.safeParse(rawData);
 
@@ -13,27 +12,33 @@ export async function createUserAction(prevState: any, formData: FormData) {
         return { success: false, message: "Datos inválidos", errors: validated.error.flatten().fieldErrors };
     }
 
+    // El frontend verifica que haya mandado contraseña, ya que es nuevo
+    if (!validated.data.password) {
+        return { success: false, message: "La contraseña es obligatoria para nuevos usuarios" };
+    }
+
     try {
-        // 2. Llamar al servicio
-        await userService.createUser(validated.data);
+        // Llamada a NestJS: POST /api/users
+        await apiFetch("/users", {
+            method: "POST",
+            body: JSON.stringify(validated.data)
+        });
 
-        // 3. Recargar la tabla
         revalidatePath("/admin/users");
-
         return { success: true, message: "Usuario creado correctamente" };
     } catch (error: any) {
-        return { success: false, message: error.message || "Error al crear usuario" };
+        return { success: false, message: error.message || "Error al conectar con la API" };
     }
 }
 
 export async function updateUserAction(prevState: any, formData: FormData) {
-    // 1. Extraemos el ID que el formulario nos envía (input type="hidden")
+    // Obtenemos el ID desde el formulario (input type="hidden")
     const id = formData.get("id") as string;
+
     if (!id) {
         return { success: false, message: "ID de usuario requerido" };
     }
 
-    // 2. Extraer y Validar el resto de los datos
     const rawData = Object.fromEntries(formData.entries());
     const validated = userSchema.safeParse(rawData);
 
@@ -42,24 +47,33 @@ export async function updateUserAction(prevState: any, formData: FormData) {
     }
 
     try {
-        // 3. Llamar al servicio para actualizar
-        await userService.updateUser(id, validated.data);
+        // CORRECCIÓN CLAVE: Extraemos el 'id' del objeto validado.
+        // NestJS (con ValidationPipe y whitelist:true) rechaza peticiones
+        // si enviamos el 'id' dentro del body en un PATCH.
+        const { id: _id, ...updatePayload } = validated.data;
 
-        // 4. Recargar la tabla
+        // Llamada a NestJS: PATCH /api/users/:id
+        await apiFetch(`/users/${id}`, {
+            method: "PATCH",
+            body: JSON.stringify(updatePayload)
+        });
+
         revalidatePath("/admin/users");
-
         return { success: true, message: "Usuario actualizado correctamente" };
     } catch (error: any) {
-        return { success: false, message: error.message || "Error al actualizar" };
+        return { success: false, message: error.message || "Error al actualizar en la API" };
     }
 }
-
 export async function deleteUserAction(id: string) {
     try {
-        await userService.deleteUser(id);
+        // Llamada a NestJS: DELETE /api/users/:id
+        await apiFetch(`/users/${id}`, {
+            method: "DELETE"
+        });
+
         revalidatePath("/admin/users");
         return { success: true, message: "Usuario eliminado correctamente" };
     } catch (error: any) {
-        return { success: false, message: error.message || "Error al eliminar usuario" };
+        return { success: false, message: error.message || "Error al eliminar en la API" };
     }
 }
